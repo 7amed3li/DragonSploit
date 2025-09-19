@@ -1,0 +1,15 @@
+services:
+  db:
+    image: postgres:15
+    container_name: dragonsploit_db
+    restart: always
+    ports:
+      - "5433:5432" # تغيير المنفذ المحلي إلى 5433
+    environment:
+      POSTGRES_USER: dragonsploit_user
+      POSTGRES_PASSWORD: testpassword
+      POSTGRES_DB: dragonsploit_dev
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+volumes:
+  postgres_data:

@@ -1,0 +1,218 @@
+// prisma/schema.prisma
+
+generator client {
+  provider = "prisma-client-js"
+  output   = "../src/generated/prisma"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+// ========================================
+// 1. نماذج المصادقة وإدارة المستخدمين
+// ========================================
+
+model User {
+  id        String   @id @default(cuid())
+  email     String   @unique
+  name      String?
+  password  String
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  // --- العلاقات ---
+  memberships Membership[] // المستخدم يمكن أن يكون عضوًا في عدة مساحات عمل
+  invitations Invitation[] @relation("UserInvitations")
+  auditLogs   AuditLog[]
+}
+
+model Organization {
+  id        String   @id @default(cuid())
+  name      String
+  slug      String   @unique // رابط فريد للمنظمة مثل "my-company"
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  // --- العلاقات ---
+  members   Membership[]
+  invitations Invitation[]
+  targets   Target[]
+  reports   Report[]
+  apiTokens ApiToken[]
+  auditLogs AuditLog[]
+}
+
+model Membership {
+  id             String   @id @default(cuid())
+  role           Role     @default(MEMBER)
+  createdAt      DateTime @default(now())
+
+  // --- العلاقات ---
+  user           User         @relation(fields: [userId], references: [id], onDelete: Cascade)
+  userId         String
+  organization   Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  organizationId String
+
+  @@unique([userId, organizationId]) // لا يمكن للمستخدم الانضمام لنفس المنظمة مرتين
+}
+
+model Invitation {
+  id             String           @id @default(cuid())
+  email          String
+  role           Role             @default(MEMBER)
+  status         InvitationStatus @default(PENDING)
+  expiresAt      DateTime
+  createdAt      DateTime         @default(now())
+
+  // --- العلاقات ---
+  organization   Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  organizationId String
+  invitedBy      User         @relation("UserInvitations", fields: [invitedById], references: [id])
+  invitedById    String
+  
+  @@unique([email, organizationId]) // لا يمكن دعوة نفس البريد الإلكتروني مرتين لنفس المنظمة
+}
+
+// ========================================
+// 2. النماذج الأساسية للفحص
+// ========================================
+
+model Target {
+  id          String   @id @default(cuid())
+  url         String
+  name        String
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  // --- العلاقات ---
+  organization   Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  organizationId String
+  scans          Scan[]
+  
+  @@unique([url, organizationId]) // لا يمكن إضافة نفس الهدف مرتين في نفس المنظمة
+}
+
+model Scan {
+  id          String     @id @default(cuid())
+  status      ScanStatus @default(PENDING)
+  startedAt   DateTime?
+  completedAt DateTime?
+  createdAt   DateTime   @default(now())
+
+  // --- العلاقات ---
+  target          Target           @relation(fields: [targetId], references: [id], onDelete: Cascade)
+  targetId        String
+  vulnerabilities Vulnerability[]
+  report          Report?          // الفحص الواحد يمكن أن يكون له تقرير واحد
+  configuration   ScanConfiguration? @relation(fields: [configurationId], references: [id])
+  configurationId String?
+}
+
+model Vulnerability {
+  id          String   @id @default(cuid())
+  type        String   // "XSS", "SQL Injection"
+  severity    Severity @default(MEDIUM)
+  description String   @db.Text
+  proof       String   @db.Text // دليل الإثبات (قد يكون طويلاً)
+  isResolved  Boolean  @default(false)
+  foundAt     DateTime @default(now())
+
+  // --- العلاقات ---
+  scan    Scan     @relation(fields: [scanId], references: [id], onDelete: Cascade)
+  scanId  String
+}
+
+model ScanConfiguration {
+  id                String  @id @default(cuid())
+  name              String  // "Full Scan", "Quick XSS Check"
+  isDiscoveryFocused Boolean @default(true)
+  isAiPowered       Boolean @default(true)
+  // يمكن إضافة المزيد من إعدادات الفحص هنا
+  
+  scans Scan[]
+}
+
+// ========================================
+// 3. نماذج التقارير والتكامل
+// ========================================
+
+model Report {
+  id        String   @id @default(cuid())
+  format    String   // "PDF", "JSON", "HTML"
+  storagePath String // مسار تخزين الملف (مثل S3 URL)
+  createdAt DateTime @default(now())
+
+  // --- العلاقات ---
+  scan           Scan         @relation(fields: [scanId], references: [id])
+  scanId         String       @unique // كل تقرير مرتبط بفحص واحد فقط
+  organization   Organization @relation(fields: [organizationId], references: [id])
+  organizationId String
+}
+
+model ApiToken {
+  id             String   @id @default(cuid())
+  name           String
+  token          String   @unique // التوكن الفعلي المشفر
+  permissions    String[] // صلاحيات التوكن
+  lastUsedAt     DateTime?
+  expiresAt      DateTime?
+  createdAt      DateTime @default(now())
+
+  // --- العلاقات ---
+  organization   Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  organizationId String
+}
+
+// ========================================
+// 4. نماذج الأمان والتدقيق
+// ========================================
+
+model AuditLog {
+  id             String   @id @default(cuid())
+  action         String   // مثل "user.login", "target.create"
+  details        Json     // تفاصيل إضافية كـ JSON
+  ipAddress      String?
+  createdAt      DateTime @default(now())
+
+  // --- العلاقات ---
+  user           User         @relation(fields: [userId], references: [id])
+  userId         String
+  organization   Organization @relation(fields: [organizationId], references: [id])
+  organizationId String
+}
+
+
+// ========================================
+// التعدادات (Enums)
+// ========================================
+
+enum Role {
+  ADMIN
+  MEMBER
+  BILLING_MANAGER
+}
+
+enum InvitationStatus {
+  PENDING
+  ACCEPTED
+  EXPIRED
+}
+
+enum ScanStatus {
+  PENDING
+  QUEUED
+  RUNNING
+  COMPLETED
+  FAILED
+  CANCELED
+}
+
+enum Severity {
+  INFO
+  LOW
+  MEDIUM
+  HIGH
+  CRITICAL
+}
