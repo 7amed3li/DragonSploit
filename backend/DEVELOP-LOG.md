@@ -1,53 +1,114 @@
-# DragonSploit - Developer & Architecture Decision Log
+DragonSploit - Developer & Architecture Decision Log
 
 This document tracks the key technical decisions, challenges, and solutions encountered during the development of the DragonSploit platform.
 
----
+🛠 Tooling & Environment
 
-### Tooling & Environment
-*   **IDE:** Visual Studio Code
-*   **Database:** PostgreSQL (via Docker)
-*   **ORM:** Prisma
-*   **AI Pair Programmer:** Google's AI (Manus) was used for brainstorming, troubleshooting guidance, and documentation generation.
+IDE: Visual Studio Code
 
----
+Database: PostgreSQL (via Docker)
 
-## 2025-09-18: Infrastructure Setup & Database Architecture
+ORM: Prisma
 
-**Objective:** Establish a robust, local development environment and define a comprehensive database schema to serve as the project's foundation.
+API Documentation: Swagger (OpenAPI)
 
-### 1. Decision: Local Development Environment using Docker
+AI Pair Programmer: Google's AI (Manus) — used for brainstorming, troubleshooting guidance, and documentation generation.
 
-*   **Choice:** PostgreSQL running in a Docker container.
-*   **Rationale:** To ensure a consistent, isolated, and reproducible development environment for all team members, eliminating "it works on my machine" issues. This aligns with modern DevOps best practices.
+Rationale for Prisma:
+Prisma was chosen over other ORMs (TypeORM, Sequelize) due to its superior type-safety, reducing runtime errors when working with TypeScript. Its auto-generated client and intuitive API for complex queries (e.g., relational data fetching) streamlined the development of tenant-aware logic.
 
-### 2. Challenge: Database Connection Failure (`P1000` & `P1001` Errors)
+📅 2025-09-19: Core SaaS API - Authentication & Authorization
+1. Decision: API Structure & Initial Server Setup
 
-*   **Symptoms:** Initially, Prisma was unable to connect to the local Docker database, throwing `P1000: Authentication failed` errors. This led to a complex troubleshooting process.
-*   **Troubleshooting Journey:**
-    1.  **Hypothesis 1: Configuration Error.** All configuration files (`.env`, `docker-compose.yml`, `schema.prisma`) were meticulously checked and found to be correct. The issue persisted.
-    2.  **Hypothesis 2: Network/Firewall Issue.** We attempted to switch to a cloud-based database (Supabase) to rule out local machine problems. This failed with a `P1001: Can't reach database server` error. `ping` commands to the Supabase domain also failed, while `ping` to `google.com` succeeded, indicating a potential network-level block.
-    3.  **Hypothesis 3: Port Conflict.** After returning to the local Docker setup, we investigated the possibility of a port conflict.
+Choice: A layered architecture (routes → controllers → services) was implemented to enforce Separation of Concerns.
 
-*   **Solution:** The root cause was identified as a port conflict. Another process on the local machine was already occupying the default PostgreSQL port `5432`. The solution was to remap the port:
-    *   Modified `docker-compose.yml` to map the host port `5433` to the container's port `5432` (`ports: - "5433:5432"`).
-    *   Updated the `DATABASE_URL` in the `.env` file to point to `localhost:5433`.
-    *   **Result:** The connection was immediately successful.
+Rationale: More maintainable, scalable, and testable code.
 
-*   **Key Lesson Learned:** When facing persistent connection issues, always verify port availability on the host machine as a primary diagnostic step.
+Service layer → business logic
 
-### 3. Decision: Comprehensive SaaS Database Schema
+Controller layer → HTTP requests/responses
 
-*   **Choice:** Moved from a basic schema to a full-fledged, multi-tenant SaaS architecture.
-*   **Rationale:** To build a scalable and feature-rich platform from the ground up, accommodating future requirements for teamwork, security, and integration.
-*   **Implementation:**
-    *   Designed and implemented a complete schema in `schema.prisma` including models for `Organization`, `Membership`, `Invitation`, `Role`, `AuditLog`, `ApiToken`, and more.
-    *   This structure supports core SaaS features like role-based access control (RBAC), team management, and security auditing.
-    *   Successfully applied the schema to the database using the `npx prisma migrate dev --name add_full_saas_schema` command.
+Router layer → URL mapping
 
-### 4. Milestone Achieved
+Implementation:
 
-*   A fully operational local development environment is now running.
-*   A comprehensive and scalable database schema has been designed and deployed.
-*   The project is now ready for the development of the core application logic (API services).
+Initial Express server in src/index.ts.
 
+Integrated ts-node and nodemon for a smooth dev workflow.
+
+2. Challenge: Spontaneous Server Shutdown
+
+Symptom: Node.js server exited immediately after starting (despite app.listen()).
+
+Troubleshooting:
+
+Hypothesis 1: Code error → ruled out.
+
+Hypothesis 2: Environment issue → tested with minimal server (test.ts), which worked.
+
+Narrowed cause: PrismaClient or swagger-jsdoc integration.
+
+Solution:
+
+Refactored entry point into a main async function.
+
+Ensured server lifecycle is explicitly tied to long-running task (app.listen).
+
+Key Lesson:
+Node.js apps must keep the event loop alive. Wrapping startup logic in a main function ensures external connections (like Prisma) don’t prematurely terminate the process.
+
+3. Decision: Implementing a Full Authentication System
+
+Choice: JWT-based authentication.
+
+Rationale: Industry standard for stateless APIs; secure and flexible.
+
+Implementation:
+
+Added bcryptjs (password hashing) & jsonwebtoken (token signing/verification).
+
+POST /api/auth/register → Validates data, hashes passwords (never stored as plain text).
+
+POST /api/auth/login → Validates credentials, returns signed JWT.
+
+Created reusable middleware kimlikDoğrula → verifies JWT for protected routes.
+
+4. Decision: Implementing Tenant-Aware Authorization
+
+Challenge: Users could access all data across tenants → major security flaw.
+
+Solution:
+
+Automatic Membership:
+
+kurumOlustur uses prisma.$transaction → creates Organization + Membership record linking creator with ADMIN role.
+
+Scoped Data Retrieval:
+
+kurumlariListele now queries Membership table → returns only organizations tied to current user.
+
+Result: Strict data isolation → users can only access organizations they belong to.
+
+5. Decision: Centralizing API Documentation with Swagger
+
+Challenge: Manual documentation updates were error-prone; protected routes hard to test.
+
+Choice: Integrated swagger-jsdoc + swagger-ui-express.
+
+Rationale: "Documentation as Code" → always synced with implementation.
+
+Implementation Fixes:
+
+Centralized Schemas: Defined models (User, Organization) in components.schemas.
+
+Authorization in UI: Added bearerAuth → enabled "Authorize" button in Swagger UI for JWT testing.
+
+Result: Self-documenting, interactive, developer-friendly API portal.
+
+✅ Milestone Achieved
+
+Stable, production-ready local dev server.
+
+Complete, secure authentication & authorization system.
+
+API is now a multi-tenant platform, ready for further features.
