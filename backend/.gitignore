@@ -1,5 +1,21 @@
-node_modules
-# Keep environment variables out of version control
+# مجلد الاعتماديات (Dependencies)
+# هذا المجلد ضخم جدًا ويتم إعادة إنشائه دائمًا باستخدام `npm install`
+/node_modules
+
+# ملفات البيئة (Environment Variables)
+# يحتوي على كلمات المرور ومفاتيح الـ API السرية! لا تقم برفعه أبدًا!
 .env
 
-/src/generated/prisma
+# مجلد المخرجات (Build Output)
+# هذا المجلد يتم إنشاؤه تلقائيًا عند ترجمة الكود
+/dist
+
+# ملفات السجلات (Logs)
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+*.log
+
+# ملفات نظام التشغيل
+.DS_Store
+Thumbs.db
