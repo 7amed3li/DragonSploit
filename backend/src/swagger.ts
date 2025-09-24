@@ -15,7 +15,7 @@ const secenekler: swaggerJSDoc.Options = {
         url: 'http://localhost:3000/api',
       },
     ],
-    // (1 ) التصحيح الأهم: تعريف مخطط الأمان
+    // (1  ) التصحيح الأهم: تعريف مخطط الأمان
     components: {
       securitySchemes: {
         bearerAuth: {
@@ -26,6 +26,20 @@ const secenekler: swaggerJSDoc.Options = {
       },
       // تعريف المخططات هنا لتكون مركزية
       schemas: {
+        // --- الكود المضاف ---
+        Target: {
+          type: 'object',
+          properties: {
+            id: { type: 'string', description: "Hedefin benzersiz kimliği." },
+            name: { type: 'string', description: "Hedefin adı." },
+            url: { type: 'string', format: 'url', description: "Taranacak URL." },
+            organizationId: { type: 'string', format: 'uuid', description: "Ait olduğu organizasyonun kimliği." },
+            createdAt: { type: 'string', format: 'date-time' },
+            updatedAt: { type: 'string', format: 'date-time' },
+          }
+        },
+        // --- نهاية الكود المضاف ---
+
         Organization: {
           type: 'object',
           properties: {
@@ -65,7 +79,7 @@ const secenekler: swaggerJSDoc.Options = {
         }
       }
     },
-    // (2 ) جعل هذا المخطط هو الافتراضي لجميع نقاط النهاية التي تحتاجه
+    // (2  ) جعل هذا المخطط هو الافتراضي لجميع نقاط النهاية التي تحتاجه
     security: [
       {
         bearerAuth: [],
