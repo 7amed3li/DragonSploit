@@ -1,114 +1,179 @@
-DragonSploit - Developer & Architecture Decision Log
+# DragonSploit - Developer & Architecture Decision Log
 
 This document tracks the key technical decisions, challenges, and solutions encountered during the development of the DragonSploit platform.
 
-🛠 Tooling & Environment
+---
 
-IDE: Visual Studio Code
+🛠 **Tooling & Environment**
 
-Database: PostgreSQL (via Docker)
+* **IDE:** Visual Studio Code
+* **Database:** PostgreSQL (via Docker)
+* **ORM:** Prisma
+* **API Documentation:** Swagger (OpenAPI)
+* **AI Pair Programmer:** Google's AI (Manus) — used for brainstorming, troubleshooting guidance, and documentation generation.
 
-ORM: Prisma
-
-API Documentation: Swagger (OpenAPI)
-
-AI Pair Programmer: Google's AI (Manus) — used for brainstorming, troubleshooting guidance, and documentation generation.
-
-Rationale for Prisma:
+**Rationale for Prisma:**
 Prisma was chosen over other ORMs (TypeORM, Sequelize) due to its superior type-safety, reducing runtime errors when working with TypeScript. Its auto-generated client and intuitive API for complex queries (e.g., relational data fetching) streamlined the development of tenant-aware logic.
 
-📅 2025-09-19: Core SaaS API - Authentication & Authorization
-1. Decision: API Structure & Initial Server Setup
+---
 
-Choice: A layered architecture (routes → controllers → services) was implemented to enforce Separation of Concerns.
+📅 **2025-09-19: Core SaaS API - Authentication & Authorization**
 
-Rationale: More maintainable, scalable, and testable code.
+1. **Decision: API Structure & Initial Server Setup**
 
-Service layer → business logic
+   * **Choice:** A layered architecture (routes → controllers → services) was implemented to enforce Separation of Concerns.
+   * **Rationale:** More maintainable, scalable, and testable code.
+   * **Implementation:** Initial Express server in `src/index.ts`; integrated `ts-node` and `nodemon` for smoother dev workflow.
 
-Controller layer → HTTP requests/responses
+2. **Challenge: Spontaneous Server Shutdown**
 
-Router layer → URL mapping
+   * **Symptom:** Node.js server exited immediately despite `app.listen()`.
+   * **Solution:** Refactored entry point into an async main function, ensuring Prisma and Swagger integrations didn’t terminate the process.
+   * **Key Lesson:** Node.js apps must keep the event loop alive. Wrapping startup logic in a main function ensures external connections (like Prisma) don’t prematurely terminate the process.
 
-Implementation:
+3. **Decision: Implementing a Full Authentication System**
 
-Initial Express server in src/index.ts.
+   * **Choice:** JWT-based authentication.
+   * **Implementation:**
 
-Integrated ts-node and nodemon for a smooth dev workflow.
+     * `bcryptjs` for password hashing.
+     * `jsonwebtoken` for signing/verifying tokens.
+     * Routes: `/api/auth/register`, `/api/auth/login`.
+     * Middleware `kimlikDoğrula` for protected routes.
 
-2. Challenge: Spontaneous Server Shutdown
+4. **Decision: Implementing Tenant-Aware Authorization**
 
-Symptom: Node.js server exited immediately after starting (despite app.listen()).
+   * **Challenge:** Users could access all tenants’ data.
+   * **Solution:**
 
-Troubleshooting:
+     * Organization creation (`kurumOlustur`) auto-generates Membership with ADMIN role.
+     * Data queries now scoped via Membership table.
+   * **Result:** Strict tenant-level data isolation.
 
-Hypothesis 1: Code error → ruled out.
+5. **Decision: Centralizing API Documentation with Swagger**
 
-Hypothesis 2: Environment issue → tested with minimal server (test.ts), which worked.
+   * **Choice:** Integrated `swagger-jsdoc` + `swagger-ui-express`.
+   * **Enhancements:** Centralized schemas, added JWT bearerAuth support in Swagger UI.
 
-Narrowed cause: PrismaClient or swagger-jsdoc integration.
+✅ **Milestone Achieved:**
 
-Solution:
+* Stable, production-ready dev server.
+* Complete authentication & authorization system.
+* Multi-tenant platform ready for next features.
 
-Refactored entry point into a main async function.
+---
 
-Ensured server lifecycle is explicitly tied to long-running task (app.listen).
+📅 **2025-09-24: Implementing Core Business Logic - Target Management**
 
-Key Lesson:
-Node.js apps must keep the event loop alive. Wrapping startup logic in a main function ensures external connections (like Prisma) don’t prematurely terminate the process.
+1. **Decision: Structuring Target Endpoints**
 
-3. Decision: Implementing a Full Authentication System
+   * **Choice:** Full CRUD endpoints for `Target`:
 
-Choice: JWT-based authentication.
+     * `POST /api/targets` → Create target.
+     * `GET /api/targets` → List targets by organization.
+     * `GET /api/targets/{id}` → Retrieve target by ID.
+     * `DELETE /api/targets/{id}` → Delete target.
+   * **Rationale:** Standard RESTful pattern covers all resource operations.
 
-Rationale: Industry standard for stateless APIs; secure and flexible.
+2. **Challenge: Ensuring Tenant-Scoped Target Management**
 
-Implementation:
+   * **Symptom:** Preventing cross-organization access by ID.
+   * **Solution:**
 
-Added bcryptjs (password hashing) & jsonwebtoken (token signing/verification).
+     * **POST:** Verify `organizationId` belongs to user’s org.
+     * **GET (list):** Require `organizationId` query param, verify membership.
+     * **GET/DELETE by ID:** Ensure target’s `organizationId` matches user’s org.
+   * **Key Lesson:** Authorization must apply at both endpoint and data levels.
 
-POST /api/auth/register → Validates data, hashes passwords (never stored as plain text).
+3. **Decision: API Input Validation**
 
-POST /api/auth/login → Validates credentials, returns signed JWT.
+   * **Choice:** Integrated `express-validator`.
+   * **Implementation:**
 
-Created reusable middleware kimlikDoğrula → verifies JWT for protected routes.
+     * POST validation:
 
-4. Decision: Implementing Tenant-Aware Authorization
+       * `name` → non-empty string.
+       * `url` → valid URL.
+       * `organizationId` → valid UUID.
+     * Centralized middleware returns `400 Bad Request` with clear errors.
 
-Challenge: Users could access all data across tenants → major security flaw.
+4. **Update: Swagger Documentation for Targets**
 
-Solution:
+   * **Action:** Documented new Target endpoints.
+   * **Enhancements:**
 
-Automatic Membership:
+     * Defined POST body schema.
+     * Added required `organizationId` param for GET.
+     * Documented 401 (Unauthorized), 403 (Forbidden), 404 (Not Found).
 
-kurumOlustur uses prisma.$transaction → creates Organization + Membership record linking creator with ADMIN role.
+✅ **Milestone Achieved:**
 
-Scoped Data Retrieval:
+* Full CRUD for Targets implemented & secured.
+* Multi-tenancy enforcement across Target operations.
+* Developer-friendly API with validation + up-to-date Swagger.
 
-kurumlariListele now queries Membership table → returns only organizations tied to current user.
+🚀 **Next Steps:**
 
-Result: Strict data isolation → users can only access organizations they belong to.
+* **Implement Scan Module:**
 
-5. Decision: Centralizing API Documentation with Swagger
+  * `POST /api/scans` → initiate scan.
+  * `GET /api/scans/{id}` → check status/results.
+* **Develop Scanning Engine:**
 
-Challenge: Manual documentation updates were error-prone; protected routes hard to test.
+  * Decide architecture (RabbitMQ / job manager).
+* **Flesh out User Roles & Permissions:**
 
-Choice: Integrated swagger-jsdoc + swagger-ui-express.
+  * E.g., restrict `DELETE` to ADMIN role.
 
-Rationale: "Documentation as Code" → always synced with implementation.
+---
 
-Implementation Fixes:
+📅 **2025-09-27: Building the Scan Module & Intensive Debugging**
 
-Centralized Schemas: Defined models (User, Organization) in components.schemas.
+1. **Decision: Implementing the Scan API Endpoints**
 
-Authorization in UI: Added bearerAuth → enabled "Authorize" button in Swagger UI for JWT testing.
+   * **Choice:** Created a secure, tenant-aware CRUD-like set of endpoints for `Scan`:
 
-Result: Self-documenting, interactive, developer-friendly API portal.
+     * `POST /api/scans` → Initiate scan.
+     * `GET /api/scans` → List scans by organization.
+     * `GET /api/scans/{id}` → Retrieve scan status/details.
+   * **Rationale:** Provides a complete interface for managing scan lifecycles with strict security boundaries.
 
-✅ Milestone Achieved
+2. **Challenge: Cross-Component Integration & Type-Safety**
 
-Stable, production-ready local dev server.
+   * **Symptoms:** TypeScript errors (TSError) + runtime `500 Internal Server Error`.
+   * **Solutions:**
 
-Complete, secure authentication & authorization system.
+     * Fixed missing Prisma back-relations (`Organization` ↔ `ScanConfiguration`).
+     * Converted `undefined` to `null` in `configurationId || null`.
+     * Extended Express `Request` type to include `kullanici`.
+     * Corrected import paths (`../services/scans.service`).
 
-API is now a multi-tenant platform, ready for further features.
+3. **Challenge: API & Browser Integration (CORS & JSON Parsing)**
+
+   * **Symptoms:** Swagger UI failed (`Failed to fetch`, `CORS`, `400 Bad Request`).
+   * **Solutions:**
+
+     * Enabled `cors` middleware in `src/index.ts`.
+     * Fixed JSON syntax (removed trailing commas).
+
+4. **Decision: Refining Authorization Logic for Better UX**
+
+   * **Problem:** Generic `403 Forbidden` errors lacked clarity.
+   * **Solution:**
+
+     * Step 1: Query for resource — if missing → `404 Not Found`.
+     * Step 2: Check permissions — if unauthorized → `403 Forbidden`.
+   * **Result:** Clearer, developer-friendly API responses.
+
+✅ **Milestone Achieved:**
+
+* Fully implemented and tested Scan API module.
+* Robust error handling + CORS support.
+* Precise authorization and developer-friendly UX.
+* Core functionality for creating & monitoring scans completed.
+
+🚀 **Next Steps:**
+
+* **Background Job Processing:** Integrate BullMQ + Redis to offload scan execution.
+* **Worker Development:** Build worker process to consume jobs, simulate scans (e.g., HTTP request), and update status (`RUNNING → COMPLETED/FAILED`).
+

@@ -15,7 +15,6 @@ const secenekler: swaggerJSDoc.Options = {
         url: 'http://localhost:3000/api',
       },
     ],
-    // (1  ) التصحيح الأهم: تعريف مخطط الأمان
     components: {
       securitySchemes: {
         bearerAuth: {
@@ -24,9 +23,63 @@ const secenekler: swaggerJSDoc.Options = {
           bearerFormat: 'JWT',
         },
       },
-      // تعريف المخططات هنا لتكون مركزية
       schemas: {
-        // --- الكود المضاف ---
+        // ========================================
+        // --- نماذج الفحص (Scan Models ) ---
+        // ========================================
+        Scan: {
+          type: 'object',
+          properties: {
+            id: { type: 'string', description: 'Benzersiz tarama kimliği.' },
+            status: { type: 'string', enum: ['PENDING', 'QUEUED', 'RUNNING', 'COMPLETED', 'FAILED', 'CANCELED'], description: 'Taramanın mevcut durumu.' },
+            targetId: { type: 'string', description: 'İlişkili hedefin kimliği.' },
+            configurationId: { type: 'string', nullable: true, description: 'Kullanılan tarama yapılandırmasının kimliği (isteğe bağlı).' },
+            startedAt: { type: 'string', format: 'date-time', nullable: true },
+            completedAt: { type: 'string', format: 'date-time', nullable: true },
+            createdAt: { type: 'string', format: 'date-time' },
+          },
+        },
+        Vulnerability: {
+          type: 'object',
+          properties: {
+            id: { type: 'string' },
+            type: { type: 'string', description: 'Zafiyet türü (örn: "XSS").' },
+            severity: { type: 'string', enum: ['INFO', 'LOW', 'MEDIUM', 'HIGH', 'CRITICAL'] },
+            description: { type: 'string' },
+            proof: { type: 'string', description: 'Zafiyetin kanıtı.' },
+            isResolved: { type: 'boolean' },
+            foundAt: { type: 'string', format: 'date-time' },
+          },
+        },
+        ScanConfiguration: {
+          type: 'object',
+          properties: {
+            id: { type: 'string' },
+            name: { type: 'string', description: 'Yapılandırma şablonunun adı (örn: "Hızlı XSS Taraması").' },
+            isDiscoveryFocused: { type: 'boolean' },
+            isAiPowered: { type: 'boolean' },
+            organizationId: { type: 'string', description: 'Ait olduğu organizasyonun kimliği.' },
+          },
+        },
+        CreateScanInput: {
+          type: 'object',
+          required: ['targetId'],
+          properties: {
+            targetId: { type: 'string', description: 'Taranacak hedefin kimliği.' },
+            configurationId: { type: 'string', description: 'Kullanılacak tarama yapılandırmasının kimliği (isteğe bağlı).' },
+          },
+        },
+        ListScansQuery: {
+          type: 'object',
+          required: ['organizationId'],
+          properties: {
+            organizationId: { type: 'string', description: 'Taramaları listelenecek organizasyonun kimliği.' },
+          },
+        },
+
+        // ========================================
+        // --- النماذج الموجودة مسبقًا ---
+        // ========================================
         Target: {
           type: 'object',
           properties: {
@@ -36,10 +89,8 @@ const secenekler: swaggerJSDoc.Options = {
             organizationId: { type: 'string', format: 'uuid', description: "Ait olduğu organizasyonun kimliği." },
             createdAt: { type: 'string', format: 'date-time' },
             updatedAt: { type: 'string', format: 'date-time' },
-          }
+          },
         },
-        // --- نهاية الكود المضاف ---
-
         Organization: {
           type: 'object',
           properties: {
@@ -48,7 +99,7 @@ const secenekler: swaggerJSDoc.Options = {
             slug: { type: 'string' },
             createdAt: { type: 'string', format: 'date-time' },
             updatedAt: { type: 'string', format: 'date-time' },
-          }
+          },
         },
         User: {
           type: 'object',
@@ -58,7 +109,7 @@ const secenekler: swaggerJSDoc.Options = {
             name: { type: 'string' },
             createdAt: { type: 'string', format: 'date-time' },
             updatedAt: { type: 'string', format: 'date-time' },
-          }
+          },
         },
         RegisterInput: {
           type: 'object',
@@ -67,7 +118,7 @@ const secenekler: swaggerJSDoc.Options = {
             email: { type: 'string', format: 'email' },
             name: { type: 'string' },
             password: { type: 'string', format: 'password' },
-          }
+          },
         },
         LoginInput: {
           type: 'object',
@@ -75,18 +126,17 @@ const secenekler: swaggerJSDoc.Options = {
           properties: {
             email: { type: 'string', format: 'email' },
             password: { type: 'string', format: 'password' },
-          }
-        }
-      }
+          },
+        },
+      },
     },
-    // (2  ) جعل هذا المخطط هو الافتراضي لجميع نقاط النهاية التي تحتاجه
     security: [
       {
         bearerAuth: [],
       },
     ],
   },
-  // (3) التصحيح: جعل المسار أكثر تحديدًا
+  // هذا هو المسار الصحيح الذي يقرأ جميع ملفات المسارات
   apis: ['./src/routes/*.ts'],
 };
 

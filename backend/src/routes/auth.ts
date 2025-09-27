@@ -1,3 +1,4 @@
+//src\routes\auth.ts
 import { Router } from 'express';
 import { body } from 'express-validator';
 // (1) استيراد الدالتين الآن
