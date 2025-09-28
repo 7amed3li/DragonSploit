@@ -177,3 +177,45 @@ Prisma was chosen over other ORMs (TypeORM, Sequelize) due to its superior type-
 * **Background Job Processing:** Integrate BullMQ + Redis to offload scan execution.
 * **Worker Development:** Build worker process to consume jobs, simulate scans (e.g., HTTP request), and update status (`RUNNING → COMPLETED/FAILED`).
 
+---
+
+📅 **2025-09-28: Strategic Pivot - From Queues to an Intent-Based Orchestrator**
+
+1.  **Initial Plan vs. Deeper Vision:**
+    *   **Initial Plan:** The conventional approach was to use a simple background job queue (like BullMQ) to process scans. The API would add a "scan job" to the queue, and a worker would execute it. This is a reliable but "dumb" system.
+    *   **Deeper Vision (The "Why"):** A core philosophy of DragonSploit is to be more than just a tool; it's an intelligent system. A simple queue executes commands blindly. An intelligent system understands *intent*. This led to a strategic pivot in our architecture.
+
+2.  **Decision: Adopt an Intent-Based Orchestration Model**
+    *   **Concept:** Instead of the API sending a direct **Command** ("*Do this*"), it now submits an **Intent** ("*I want this outcome*") to a central "Orchestrator" (the system's brain).
+    *   **Analogy:**
+        *   **Command (Traditional Queue):** "Go to printer #3, use black ink, staple the document." The worker is just a pair of hands.
+        *   **Intent (Our New Model):** "Make sure the accounting department gets this report by 5 PM." The Orchestrator is a smart assistant that thinks: "Printer #3 is busy, I'll use #5. Accounting prefers color graphs, so I'll print in color. I'll use the internal mail service because it's faster."
+        
+### 3. **Architectural Comparison**
+
+| **Dimension**       | **Traditional Queue Model** | **Intent-Based Orchestrator Model** | **Reason for Our Choice** |
+|---------------------|-----------------------------|-------------------------------------|----------------------------|
+| **Core Logic**      | API dictates **how** the scan is executed. | Orchestrator determines the optimal **how** based on context. | Centralizes intelligence, enabling smarter and more adaptable decisions. |
+| **Unit of Work**    | A simple job carrying static data. | A rich **Intent** object containing goals, constraints, and context. | Provides deeper context-awareness, unlocking advanced decision-making. |
+| **Flexibility**     | Rigid — workers follow predefined scripts. | Dynamic — Orchestrator can reprioritize, adapt strategies, and allocate resources in real time. | Future-proofs the system and supports AI-driven enhancements without API changes. |
+| **Scalability**     | Linear scaling via more generic “dumb” workers. | Intelligent scaling with heterogeneous, specialized workers coordinated by the Orchestrator. | Allows efficient, targeted scaling (e.g., language- or exploit-specific workers). |
+| **System Role**     | Acts as a simple “To-Do List” manager. | Functions as the **Central Nervous System** of the platform. | Fully aligns with DragonSploit’s vision of an intelligent, adaptive security platform. |
+
+4.  **Implementation Plan:**
+    *   **Messaging Backbone:** We will still use BullMQ and Redis, but not as a simple queue. They will serve as the high-speed messaging infrastructure (the "nerves") connecting the API, the Orchestrator, and the Workers.
+    *   **Communication Channels:** We will define specific channels (e.g., `intents-channel`, `actions-channel`, `results-channel`) for structured communication.
+    *   **Core Components:**
+        *   **API:** Submits `Intent` objects.
+        *   **Orchestrator (Master Worker):** Listens for `Intents`, makes decisions, and dispatches `Actions`.
+        *   **Scan Workers (Action Workers):** Listen for `Actions` and execute them.
+
+✅ **Milestone Achieved:**
+*   Defined a revolutionary, non-traditional architecture that aligns with the project's core vision.
+*   Documented the clear distinction and advantages of an Intent-Based model over a traditional queue system.
+
+🚀 **Next Steps:**
+*   Implement the foundational messaging infrastructure using BullMQ.
+*   Build the first version of the `Intent` data structure and the `Orchestrator Client`.
+*   Develop the initial, simple versions of the Orchestrator and a Scan Worker to prove the communication flow.
+
+---
