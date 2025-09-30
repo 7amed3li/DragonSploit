@@ -1,15 +1,42 @@
+version: '3.8'
+
 services:
+  # 1. قاعدة البيانات الأساسية (كما طلبت)
   db:
     image: postgres:15
     container_name: dragonsploit_db
     restart: always
     ports:
-      - "5433:5432" # تغيير المنفذ المحلي إلى 5433
+      - "5433:5432"
     environment:
       POSTGRES_USER: dragonsploit_user
       POSTGRES_PASSWORD: testpassword
       POSTGRES_DB: dragonsploit_dev
     volumes:
       - postgres_data:/var/lib/postgresql/data
+
+  # 2. Redis لقوائم الانتظار (BullMQ)
+  redis:
+    image: redis:7-alpine
+    container_name: dragonsploit_redis
+    restart: always
+    ports:
+      - "6379:6379"
+
+  # 3. تطبيق Node.js (المنسق والعمال)
+  app:
+    build: . # سيقوم ببناء صورة Docker من نفس المجلد
+    container_name: dragonsploit_app
+    restart: always
+    ports:
+      - "3000:3000" # منفذ الـ API
+    environment:
+      - DATABASE_URL=postgresql://dragonsploit_user:testpassword@db:5432/dragonsploit_dev
+      - REDIS_HOST=redis
+      - REDIS_PORT=6379
+    depends_on:
+      - db
+      - redis
+
 volumes:
   postgres_data:
