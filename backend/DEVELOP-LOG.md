@@ -219,3 +219,45 @@ Prisma was chosen over other ORMs (TypeORM, Sequelize) due to its superior type-
 *   Develop the initial, simple versions of the Orchestrator and a Scan Worker to prove the communication flow.
 
 ---
+
+### 📅 2025-09-30: The Orchestrator Gauntlet - A Battle with Infrastructure
+
+1.  **Initial Goal: Implementing the Orchestrator's Backbone**
+    *   **Plan:** The architectural vision was set. The next logical step was to implement the messaging and orchestration backbone. The initial candidates were powerful, stateful workflow engines.
+    *   **First Choice: Temporal.io.** Based on its reputation for durability and being a "solid foundation," we decided to build our system on Temporal, using PostgreSQL for persistence.
+
+2.  **Challenge #1: The Temporal Configuration Nightmare**
+    *   **Symptom:** For over five hours, we were locked in a brutal battle trying to configure a stable, multi-container Temporal environment using Docker Compose. The `temporal-server` container consistently failed to start.
+    *   **Root Causes & Debugging Journey:**
+        *   **Persistence Configuration:** The initial error was `missing config for datastore "default"`. We discovered that modern Temporal versions require a new, more verbose environment variable structure (`PERSISTENCE_DATASTORES_DEFAULT_...`) instead of the older, simpler one.
+        *   **Database Type Mismatch:** After fixing the datastore, a new error emerged: `Persistence.DataStores[default](value).Cassandra.Hosts: zero value`. This indicated that despite specifying a PostgreSQL plugin, the server was still attempting to configure Cassandra. The fix was to explicitly set `PERSISTENCE_DATASTORES_DEFAULT_TYPE=sql`.
+        *   **Schema & Connection Issues:** Further errors like `no usable database connection found` pointed to persistent misconfigurations and potential issues with the schema setup job.
+    *   **Decision:** After numerous failed attempts and realizing the extreme fragility of the local setup, we declared the Temporal approach a **failure for our development velocity.** The complexity of its infrastructure setup was too high a price to pay.
+
+3.  **Strategic Pivot #1: Camunda Platform**
+    *   **Rationale:** Based on our initial report, Camunda was positioned as a powerful and "easier to set up" alternative. We decided to pivot, hoping for a quick win.
+    *   **Challenge #2: The Camunda Dependency Hell**
+        *   **Symptom:** Similar to Temporal, we fell into a new cycle of infrastructure hell. Services failed to start, this time due to internal dependencies and startup order.
+        *   **Root Causes & Debugging Journey:**
+            *   **Image Versioning:** Initial attempts failed due to using a non-existent image tag (`8.5.5`). Correcting this to a valid tag (`8.5.0`) solved the image pulling issue.
+            *   **Network Timeouts:** We then faced `TLS handshake timeout` errors, indicating network instability during the large image downloads.
+            *   **Internal Service Failure (`Identity` & `Operate`):** The final blocker was a cascade of failures. `Identity` failed to connect to its internal Keycloak instance (`Connection refused`), and `Operate` failed to connect to `Elasticsearch` because it started too early.
+    *   **Decision:** After adding complex `healthcheck` and `depends_on` conditions, and still facing a non-functional UI (`ERR_EMPTY_RESPONSE`), we concluded that any complex, multi-container orchestration engine was the **wrong tool for this stage of development.**
+
+4.  **Strategic Pivot #2: Radical Simplification - Back to First Principles**
+    *   **The Core Lesson:** The "perfect" architecture on paper is useless if it can't be implemented and iterated upon quickly. Our enemy was not the engine's features, but the **infrastructural complexity**.
+    *   **Final Decision: Embrace the "Simple & Direct" Model with BullMQ + Redis.** We revisited our initial architectural comparison and made a crucial decision: to abandon the all-in-one, stateful workflow engines for now and return to the simpler, more direct model outlined in our original report (Option A).
+    *   **Rationale:**
+        *   **Simplicity = Velocity:** A two-service setup (Redis + App) is infinitely simpler to configure and debug than a 6-service micro-platform.
+        *   **Control:** While logic may be more "scattered," it gives us full control within our Node.js/TypeScript codebase, an environment we are already comfortable with.
+        *   **Proven Success:** We successfully established a stable, working environment with PostgreSQL, Redis, and a TypeScript application communicating via BullMQ, proving this model's viability in minutes, not hours.
+
+✅ **Milestone Achieved:**
+*   Successfully built and launched a stable, multi-container development environment using **PostgreSQL, Redis, and a TypeScript/BullMQ application.**
+*   Validated the ability to add jobs to a queue from an API endpoint and have a worker process them.
+*   Learned a critical, hard-won lesson: **Prioritize a simple, working, and iterable foundation over a theoretically "perfect" but complex architecture, especially in the early stages.**
+
+🚀 **Next Steps:**
+*   Flesh out the Orchestrator and Worker logic within the new, stable BullMQ architecture.
+*   Integrate Prisma within the workers to persist scan results to the PostgreSQL database.
+*   Build a robust job management and status tracking system on top of the BullMQ foundation.
