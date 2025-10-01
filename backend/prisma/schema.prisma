@@ -1,9 +1,10 @@
 // prisma/schema.prisma
 
 generator client {
-  provider = "prisma-client-js"
-  
+  provider      = "prisma-client-js"
+  binaryTargets = ["native", "linux-musl-openssl-3.0.x"]
 }
+
 
 datasource db {
   provider = "postgresql"
@@ -45,6 +46,7 @@ model Organization {
   reports   Report[]
   apiTokens ApiToken[]
   auditLogs AuditLog[]
+  scans     Scan[]
 }
 
 model Membership {
@@ -107,6 +109,9 @@ model Scan {
   // --- العلاقات ---
   target          Target           @relation(fields: [targetId], references: [id], onDelete: Cascade)
   targetId        String
+    
+  organization   Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  organizationId String
   vulnerabilities Vulnerability[]
   report          Report?          // الفحص الواحد يمكن أن يكون له تقرير واحد
   configuration   ScanConfiguration? @relation(fields: [configurationId], references: [id])

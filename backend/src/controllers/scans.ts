@@ -1,5 +1,4 @@
 import { Request, Response, NextFunction } from 'express';
-// --- التعديل هنا ---
 import * as scanService from '../services/scans';
 
 export const createScan = async (
@@ -10,11 +9,18 @@ export const createScan = async (
   try {
     const userId = req.kullanici!.id;
     const { targetId, configurationId } = req.body;
+    
+    // هذه الدالة الآن تضيف المهمة إلى قائمة الانتظار بفضل التعديلات في ملف الخدمة
     const scan = await scanService.initiateScan(userId, targetId, configurationId);
+    
+    // --- بداية التعديل ---
+    // تم تغيير الرسالة لتكون أكثر دقة وتوضح أن الفحص تم وضعه في قائمة الانتظار
     res.status(201).json({
-      message: 'Scan initiated successfully. It is now pending execution.',
+      message: 'Scan successfully queued for execution.',
       data: scan,
     });
+    // --- نهاية التعديل ---
+
   } catch (error) {
     next(error);
   }

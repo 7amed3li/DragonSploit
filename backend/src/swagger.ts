@@ -2,17 +2,18 @@ import swaggerJSDoc from 'swagger-jsdoc';
 import swaggerUi from 'swagger-ui-express';
 import { Express } from 'express';
 
-const secenekler: swaggerJSDoc.Options = {
+const options: swaggerJSDoc.Options = {
   definition: {
     openapi: '3.0.0',
     info: {
       title: 'DragonSploit API',
       version: '1.0.0',
-      description: 'DragonSploit REST API için kapsamlı dokümantasyon',
+      description: 'Comprehensive documentation for the DragonSploit REST API.',
     },
     servers: [
       {
-        url: 'http://localhost:3000/api',
+        // تأكد من أن هذا الرابط يطابق المنفذ الذي يعمل عليه الخادم
+        url: `http://localhost:3001/api`,
       },
     ],
     components: {
@@ -25,15 +26,16 @@ const secenekler: swaggerJSDoc.Options = {
       },
       schemas: {
         // ========================================
-        // --- نماذج الفحص (Scan Models ) ---
+        // --- Scan Models ---
         // ========================================
         Scan: {
           type: 'object',
           properties: {
-            id: { type: 'string', description: 'Benzersiz tarama kimliği.' },
-            status: { type: 'string', enum: ['PENDING', 'QUEUED', 'RUNNING', 'COMPLETED', 'FAILED', 'CANCELED'], description: 'Taramanın mevcut durumu.' },
-            targetId: { type: 'string', description: 'İlişkili hedefin kimliği.' },
-            configurationId: { type: 'string', nullable: true, description: 'Kullanılan tarama yapılandırmasının kimliği (isteğe bağlı).' },
+            id: { type: 'string', description: 'Unique scan identifier.' },
+            status: { type: 'string', enum: ['PENDING', 'QUEUED', 'RUNNING', 'COMPLETED', 'FAILED', 'CANCELED'], description: 'The current status of the scan.' },
+            targetId: { type: 'string', description: 'ID of the associated target.' },
+            organizationId: { type: 'string', description: 'ID of the owning organization.' }, // <-- إضافة مهمة
+            configurationId: { type: 'string', nullable: true, description: 'ID of the scan configuration used (optional ).' },
             startedAt: { type: 'string', format: 'date-time', nullable: true },
             completedAt: { type: 'string', format: 'date-time', nullable: true },
             createdAt: { type: 'string', format: 'date-time' },
@@ -43,10 +45,10 @@ const secenekler: swaggerJSDoc.Options = {
           type: 'object',
           properties: {
             id: { type: 'string' },
-            type: { type: 'string', description: 'Zafiyet türü (örn: "XSS").' },
+            type: { type: 'string', description: 'Type of vulnerability (e.g., "XSS").' },
             severity: { type: 'string', enum: ['INFO', 'LOW', 'MEDIUM', 'HIGH', 'CRITICAL'] },
             description: { type: 'string' },
-            proof: { type: 'string', description: 'Zafiyetin kanıtı.' },
+            proof: { type: 'string', description: 'Proof of the vulnerability.' },
             isResolved: { type: 'boolean' },
             foundAt: { type: 'string', format: 'date-time' },
           },
@@ -55,38 +57,38 @@ const secenekler: swaggerJSDoc.Options = {
           type: 'object',
           properties: {
             id: { type: 'string' },
-            name: { type: 'string', description: 'Yapılandırma şablonunun adı (örn: "Hızlı XSS Taraması").' },
+            name: { type: 'string', description: 'Name of the configuration template (e.g., "Quick XSS Scan").' },
             isDiscoveryFocused: { type: 'boolean' },
             isAiPowered: { type: 'boolean' },
-            organizationId: { type: 'string', description: 'Ait olduğu organizasyonun kimliği.' },
+            organizationId: { type: 'string', description: 'ID of the owning organization.' },
           },
         },
         CreateScanInput: {
           type: 'object',
           required: ['targetId'],
           properties: {
-            targetId: { type: 'string', description: 'Taranacak hedefin kimliği.' },
-            configurationId: { type: 'string', description: 'Kullanılacak tarama yapılandırmasının kimliği (isteğe bağlı).' },
+            targetId: { type: 'string', description: 'ID of the target to be scanned.' },
+            configurationId: { type: 'string', description: 'ID of the scan configuration to use (optional).' },
           },
         },
         ListScansQuery: {
           type: 'object',
           required: ['organizationId'],
           properties: {
-            organizationId: { type: 'string', description: 'Taramaları listelenecek organizasyonun kimliği.' },
+            organizationId: { type: 'string', description: 'ID of the organization to list scans for.' },
           },
         },
 
         // ========================================
-        // --- النماذج الموجودة مسبقًا ---
+        // --- Existing Models ---
         // ========================================
         Target: {
           type: 'object',
           properties: {
-            id: { type: 'string', description: "Hedefin benzersiz kimliği." },
-            name: { type: 'string', description: "Hedefin adı." },
-            url: { type: 'string', format: 'url', description: "Taranacak URL." },
-            organizationId: { type: 'string', format: 'uuid', description: "Ait olduğu organizasyonun kimliği." },
+            id: { type: 'string', description: "The target's unique identifier." },
+            name: { type: 'string', description: "The target's name." },
+            url: { type: 'string', format: 'url', description: "The URL to be scanned." },
+            organizationId: { type: 'string', format: 'uuid', description: "ID of the owning organization." },
             createdAt: { type: 'string', format: 'date-time' },
             updatedAt: { type: 'string', format: 'date-time' },
           },
@@ -136,19 +138,24 @@ const secenekler: swaggerJSDoc.Options = {
       },
     ],
   },
-  // هذا هو المسار الصحيح الذي يقرأ جميع ملفات المسارات
-  apis: ['./src/routes/*.ts'],
+  // --- بداية التعديل ---
+  // هذا المسار يضمن أن swagger يقرأ جميع ملفات .ts داخل مجلد routes
+  apis: ['./src/routes/**/*.ts'],
+  // --- نهاية التعديل ---
 };
 
-const swaggerSpec = swaggerJSDoc(secenekler);
+const swaggerSpec = swaggerJSDoc(options);
 
-function swaggerKurulumu(app: Express) {
+// تم تغيير اسم الدالة ليكون بالإنجليزية
+export function setupSwagger(app: Express) {
+  // المسار الذي ستظهر فيه واجهة المستخدم
   app.use('/api-docs', swaggerUi.serve, swaggerUi.setup(swaggerSpec));
+  
+  // المسار الذي يوفر ملف JSON الخام للمواصفات
   app.get('/api-docs.json', (req, res) => {
     res.setHeader('Content-Type', 'application/json');
     res.send(swaggerSpec);
   });
-  console.log('Swagger UI, /api-docs adresinde mevcut');
-}
 
-export default swaggerKurulumu;
+  console.log(`📚 Swagger UI is available at /api-docs`);
+}

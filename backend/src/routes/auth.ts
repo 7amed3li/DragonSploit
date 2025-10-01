@@ -1,29 +1,29 @@
-//src\routes\auth.ts
 import { Router } from 'express';
 import { body } from 'express-validator';
-// (1) استيراد الدالتين الآن
-import { kullaniciKaydi, kullaniciGiris } from '../controllers/kullanici';
+import { kullaniciKaydi, kullaniciGiris } from '../controllers/kullanici'; // يمكنك تغيير أسماء هذه الدوال لاحقاً
+import { validate } from '../utils/validate'; // إضافة validate middleware
 
 const authRouter = Router();
 
-// --- مسار التسجيل ---
-const kayitKurallari = [
-  body('email').isEmail().withMessage('Lütfen geçerli bir e-posta adresi girin.'),
-  body('name').notEmpty().withMessage('İsim alanı boş olamaz.'),
+// --- Registration Route ---
+const registrationRules = [
+  body('email').isEmail().withMessage('Please enter a valid email address.'),
+  body('name').notEmpty().withMessage('Name field cannot be empty.'),
   body('password')
-    .isLength({ min: 8 }).withMessage('Şifre en az 8 karakter uzunluğunda olmalıdır.')
-    .matches(/\d/).withMessage('Şifre en az bir rakam içermelidir.')
-    .matches(/[a-z]/).withMessage('Şifre en az bir küçük harf içermelidir.')
-    .matches(/[A-Z]/).withMessage('Şifre en az bir büyük harf içermelidir.'),
+    .isLength({ min: 8 }).withMessage('Password must be at least 8 characters long.')
+    .matches(/\d/).withMessage('Password must contain at least one number.')
+    .matches(/[a-z]/).withMessage('Password must contain at least one lowercase letter.')
+    .matches(/[A-Z]/).withMessage('Password must contain at least one uppercase letter.'),
+  validate, // تطبيق التحقق
 ];
 
 /**
  * @swagger
  * /auth/register:
  *   post:
- *     summary: Yeni bir kullanıcı kaydı oluşturur
+ *     summary: Creates a new user account
  *     tags: [Auth]
- *     description: Sisteme yeni bir kullanıcı ekler ve şifresini güvenli bir şekilde hash'ler.
+ *     description: Adds a new user to the system and securely hashes their password.
  *     requestBody:
  *       required: true
  *       content:
@@ -32,30 +32,31 @@ const kayitKurallari = [
  *             $ref: '#/components/schemas/RegisterInput'
  *     responses:
  *       '201':
- *         description: Kullanıcı başarıyla oluşturuldu.
+ *         description: User created successfully.
  *         content:
  *           application/json:
  *             schema:
  *               $ref: '#/components/schemas/User'
- *       '400': { description: 'Geçersiz istek (doğrulama hataları).' }
- *       '409': { description: 'Çakışma (e-posta zaten kullanılıyor).' }
+ *       '400': { description: 'Invalid request (validation errors).' }
+ *       '409': { description: 'Conflict (email already in use).' }
  */
-authRouter.post('/register', kayitKurallari, kullaniciKaydi);
+authRouter.post('/register', registrationRules, kullaniciKaydi);
 
 
-// --- مسار تسجيل الدخول ---
-const girisKurallari = [
-  body('email').isEmail().withMessage('Lütfen geçerli bir e-posta adresi girin.'),
-  body('password').notEmpty().withMessage('Şifre alanı boş olamaz.'),
+// --- Login Route ---
+const loginRules = [
+  body('email').isEmail().withMessage('Please enter a valid email address.'),
+  body('password').notEmpty().withMessage('Password field cannot be empty.'),
+  validate, // تطبيق التحقق
 ];
 
 /**
  * @swagger
  * /auth/login:
  *   post:
- *     summary: Kullanıcı girişi yapar ve JWT döndürür
+ *     summary: Logs in a user and returns a JWT
  *     tags: [Auth]
- *     description: Kullanıcının kimliğini doğrular ve erişim için bir JSON Web Token (JWT) döndürür.
+ *     description: Authenticates a user and returns a JSON Web Token (JWT) for access.
  *     requestBody:
  *       required: true
  *       content:
@@ -64,50 +65,21 @@ const girisKurallari = [
  *             $ref: '#/components/schemas/LoginInput'
  *     responses:
  *       '200':
- *         description: Giriş başarılı, token döndürüldü.
+ *         description: Login successful, token returned.
  *         content:
  *           application/json:
  *             schema:
  *               type: object
  *               properties:
- *                 mesaj:
+ *                 message:
  *                   type: string
- *                   example: "Giriş başarılı!"
+ *                   example: "Login successful!"
  *                 token:
  *                   type: string
  *                   example: "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9..."
- *       '400': { description: 'Eksik veya geçersiz veri.' }
- *       '401': { description: 'Yetkisiz (geçersiz e-posta veya şifre).' }
+ *       '400': { description: 'Missing or invalid data.' }
+ *       '401': { description: 'Unauthorized (invalid email or password).' }
  */
-authRouter.post('/login', girisKurallari, kullaniciGiris);
-
-
-// --- تعريف المخططات (Schemas) لـ Swagger ---
-/**
- * @swagger
- * components:
- *   schemas:
- *     User:
- *       type: object
- *       properties:
- *         id: { type: string, description: "Kullanıcının benzersiz kimliği." }
- *         email: { type: string, format: email, description: "Kullanıcının e-posta adresi." }
- *         name: { type: string, description: "Kullanıcının adı." }
- *         createdAt: { type: string, format: date-time, description: "Oluşturulma tarihi." }
- *         updatedAt: { type: string, format: date-time, description: "Son güncellenme tarihi." }
- *     RegisterInput:
- *       type: object
- *       required: [email, name, password]
- *       properties:
- *         email: { type: string, format: email, example: "test@example.com" }
- *         name: { type: string, example: "Test Kullanıcısı" }
- *         password: { type: string, format: password, description: "En az 8 karakter, büyük/küçük harf ve rakam.", example: "Password123" }
- *     LoginInput:
- *       type: object
- *       required: [email, password]
- *       properties:
- *         email: { type: string, format: email, example: "test@example.com" }
- *         password: { type: string, format: password, example: "Password123" }
- */
+authRouter.post('/login', loginRules, kullaniciGiris);
 
 export default authRouter;

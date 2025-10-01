@@ -1,25 +1,27 @@
 import { Router } from 'express';
 import { body } from 'express-validator';
-import { kurumOlustur, kurumlariListele } from '../controllers/kurum';
+import { kurumOlustur, kurumlariListele } from '../controllers/kurum'; // يمكنك تغيير أسماء هذه الدوال لاحقاً
 import { kimlikDoğrula } from '../middlewares/auth';
+import { validate } from '../utils/validate'; // إضافة validate middleware
 
-const kurumRouter = Router();
+const organizationRouter = Router();
 
-kurumRouter.use(kimlikDoğrula);
+organizationRouter.use(kimlikDoğrula);
 
-const kurumOlusturmaKurallari = [
+const createOrganizationRules = [
   body('name')
-    .notEmpty().withMessage('İsim (name) alanı boş olamaz.')
-    .isString().withMessage('İsim (name) alanı bir metin olmalıdır.')
-    .isLength({ min: 3, max: 100 }).withMessage('İsim (name) 3 ile 100 karakter arasında olmalıdır.'),
+    .notEmpty().withMessage('Name field cannot be empty.')
+    .isString().withMessage('Name must be a string.')
+    .isLength({ min: 3, max: 100 }).withMessage('Name must be between 3 and 100 characters.'),
+  validate, // تطبيق التحقق
 ];
 
 /**
  * @swagger
- * /kurumlar:
+ * /organizations:
  *   post:
- *     summary: Yeni bir kurum oluşturur
- *     tags: [Kurumlar]
+ *     summary: Creates a new organization
+ *     tags: [Organizations]
  *     security:
  *       - bearerAuth: []
  *     requestBody:
@@ -32,28 +34,28 @@ const kurumOlusturmaKurallari = [
  *             properties:
  *               name:
  *                 type: string
- *                 example: "Yeni Teknoloji Şirketim"
+ *                 example: "My New Tech Company"
  *     responses:
  *       '201':
- *         description: Kurum başarıyla oluşturuldu.
+ *         description: Organization created successfully.
  *         content:
  *           application/json:
  *             schema:
  *               $ref: '#/components/schemas/Organization'
  */
-kurumRouter.post('/', kurumOlusturmaKurallari, kurumOlustur);
+organizationRouter.post('/', createOrganizationRules, kurumOlustur);
 
 /**
  * @swagger
- * /kurumlar:
+ * /organizations:
  *   get:
- *     summary: Tüm kurumları listeler
- *     tags: [Kurumlar]
+ *     summary: Lists all organizations for the current user
+ *     tags: [Organizations]
  *     security:
  *       - bearerAuth: []
  *     responses:
  *       '200':
- *         description: Kurumların listesi başarıyla alındı.
+ *         description: A list of organizations was successfully retrieved.
  *         content:
  *           application/json:
  *             schema:
@@ -61,6 +63,6 @@ kurumRouter.post('/', kurumOlusturmaKurallari, kurumOlustur);
  *               items:
  *                 $ref: '#/components/schemas/Organization'
  */
-kurumRouter.get('/', kurumlariListele);
+organizationRouter.get('/', kurumlariListele);
 
-export default kurumRouter;
+export default organizationRouter;

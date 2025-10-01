@@ -1,53 +1,65 @@
-// src/routes/target.ts
-
 import { Router } from 'express';
-import { body } from 'express-validator';
+import { body, query, param } from 'express-validator'; // استيراد query و param
 import { kimlikDoğrula } from '../middlewares/auth';
+import { validate } from '../utils/validate'; // إضافة validate
 import {
   hedefOlustur,
   hedefleriListele,
   getSingleTarget,
   deleteTarget
-} from '../controllers/target';
+} from '../controllers/target'; // يمكنك تغيير أسماء هذه الدوال لاحقاً
 
 const targetRouter = Router();
 targetRouter.use(kimlikDoğrula);
 
-// --- المسار 1: GET /api/targets (لعرض قائمة الأهداف) ---
+// --- Validation Rules ---
+const createTargetRules = [
+  body('name').notEmpty().withMessage('Target name is required.').isString(),
+  body('url').isURL().withMessage('A valid URL is required.'),
+  body('organizationId').notEmpty().isString().withMessage('A valid organization ID is required.'),
+  validate,
+];
+
+const listTargetsRules = [
+  query('organizationId').notEmpty().withMessage('organizationId query parameter is required.').isString(),
+  validate,
+];
+
+const targetIdParamRule = [
+  param('id').notEmpty().withMessage('Target ID in path is required.').isString(),
+  validate,
+];
+
+// --- Routes ---
+
 /**
  * @swagger
  * /targets:
  *   get:
- *     summary: Belirli bir organizasyon için tüm hedefleri listeler
+ *     summary: Lists all targets for a specific organization
  *     tags: [Targets]
  *     parameters:
  *       - in: query
  *         name: organizationId
  *         required: true
  *         schema: { type: string }
- *         description: Hedefleri listelenecek organizasyonun ID'si.
+ *         description: The ID of the organization to list targets for.
  *     responses:
  *       '200':
- *         description: Hedeflerin bir listesi.
+ *         description: A list of targets.
  *         content:
  *           application/json:
  *             schema:
  *               type: array
  *               items: { $ref: '#/components/schemas/Target' }
  */
-targetRouter.get('/', hedefleriListele);
+targetRouter.get('/', listTargetsRules, hedefleriListele);
 
-// --- المسار 2: POST /api/targets (لإنشاء هدف جديد) ---
-const hedefOlusturmaKurallari = [
-  body('name').notEmpty().withMessage('Hedef adı zorunludur.').isString(),
-  body('url').isURL().withMessage('Geçerli bir URL zorunludur.'),
-  body('organizationId').notEmpty().isString().withMessage('Geçerli bir organizasyon IDsi zorunludur.'),
-];
 /**
  * @swagger
  * /targets:
  *   post:
- *     summary: Bir organizasyon içinde yeni bir hedef oluşturur
+ *     summary: Creates a new target within an organization
  *     tags: [Targets]
  *     requestBody:
  *       required: true
@@ -56,59 +68,57 @@ const hedefOlusturmaKurallari = [
  *           schema:
  *             type: object
  *             properties:
- *               name: { type: string, example: "Üretim API'm" }
- *               url: { type: string, example: "https://api.sirketim.com" }
+ *               name: { type: string, example: "My Production API" }
+ *               url: { type: string, example: "https://api.mycompany.com" }
  *               organizationId: { type: string }
  *     responses:
  *       '201':
- *         description: Hedef başarıyla oluşturuldu.
+ *         description: Target created successfully.
  *         content:
  *           application/json:
  *             schema: { $ref: '#/components/schemas/Target' }
  */
-targetRouter.post('/', hedefOlusturmaKurallari, hedefOlustur );
+targetRouter.post('/', createTargetRules, hedefOlustur  );
 
-// --- المسار 3: GET /api/targets/:id (لعرض هدف واحد) ---
 /**
  * @swagger
  * /targets/{id}:
  *   get:
- *     summary: ID'ye göre tek bir hedefi getirir
+ *     summary: Gets a single target by ID
  *     tags: [Targets]
  *     parameters:
  *       - in: path
  *         name: id
  *         required: true
  *         schema: { type: string }
- *         description: Alınacak hedefin ID'si.
+ *         description: The ID of the target to retrieve.
  *     responses:
  *       '200':
- *         description: Hedef nesnesi.
+ *         description: The target object.
  *         content:
  *           application/json:
  *             schema: { $ref: '#/components/schemas/Target' }
- *       '404': { description: 'Hedef bulunamadı.' }
+ *       '404': { description: 'Target not found.' }
  */
-targetRouter.get('/:id', getSingleTarget);
+targetRouter.get('/:id', targetIdParamRule, getSingleTarget);
 
-// --- المسار 4: DELETE /api/targets/:id (لحذف هدف) ---
 /**
  * @swagger
  * /targets/{id}:
  *   delete:
- *     summary: ID'ye göre bir hedefi siler
+ *     summary: Deletes a target by ID
  *     tags: [Targets]
  *     parameters:
  *       - in: path
  *         name: id
  *         required: true
  *         schema: { type: string }
- *         description: Silinecek hedefin ID'si.
+ *         description: The ID of the target to delete.
  *     responses:
  *       '204':
- *         description: Hedef başarıyla silindi.
- *       '404': { description: 'Silinecek hedef bulunamadı.' }
+ *         description: Target deleted successfully.
+ *       '404': { description: 'Target to delete was not found.' }
  */
-targetRouter.delete('/:id', deleteTarget);
+targetRouter.delete('/:id', targetIdParamRule, deleteTarget);
 
 export default targetRouter;

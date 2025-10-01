@@ -1,27 +1,26 @@
 import { PrismaClient, ScanStatus } from '@prisma/client';
 import { ForbiddenError, NotFoundError } from '../utils/errors';
+import { scanQueue } from '../worker/queues/scan.queue'; 
 
 const prisma = new PrismaClient();
 
 /**
- * يبدأ عملية فحص جديدة بعد التحقق من الصلاحيات.
+ * يبدأ عملية فحص جديدة بعد التحقق من الصلاحيات، ويضعها في قائمة الانتظار.
  * @param userId - معرف المستخدم الذي بدأ الفحص.
  * @param targetId - معرف الهدف المراد فحصه.
  * @param configurationId - (اختياري) معرف تكوين الفحص المراد استخدامه.
- * @returns كائن الفحص الذي تم إنشاؤه.
+ * @returns كائن الفحص الذي تم إنشاؤه ووضعه في قائمة الانتظار.
  */
 export const initiateScan = async (
   userId: string,
   targetId: string,
   configurationId?: string
 ) => {
-  // --- التعديل الأول: فصل التحقق ---
   // 1. ابحث عن الهدف أولاً.
   const target = await prisma.target.findUnique({
     where: { id: targetId },
   });
 
-  // إذا لم يتم العثور على الهدف، أرسل خطأ 404 واضح.
   if (!target) {
     throw new NotFoundError('Target not found');
   }
@@ -36,7 +35,6 @@ export const initiateScan = async (
     },
   });
 
-  // إذا لم يكن المستخدم عضوًا، أرسل خطأ 403 واضح.
   if (!membership) {
     throw new ForbiddenError('You do not have permission to scan this target');
   }
@@ -54,17 +52,25 @@ export const initiateScan = async (
     }
   }
 
-  // 4. أنشئ سجل الفحص الجديد.
+
+  // 4. أنشئ سجل الفحص الجديد بحالة "QUEUED".
   const scan = await prisma.scan.create({
     data: {
       targetId: targetId,
-      status: ScanStatus.PENDING,
+      organizationId: target.organizationId, // <-- (التعديل 2: إضافة علاقة المنظمة)
+      status: ScanStatus.QUEUED, // <-- (التعديل 3: تغيير الحالة)
       configurationId: configurationId || null,
     },
   });
 
-  // TODO: Trigger background job here
+  // 5. أضف مهمة جديدة إلى قائمة الانتظار.
+  await scanQueue.add('scan-job', { scanId: scan.id }); // <-- (التعديل 4: إضافة المهمة)
+  console.log(`✅ Scan job added to queue for scanId: ${scan.id}`);
+
+  // 6. أرجع سجل الفحص الذي تم إنشاؤه.
   return scan;
+
+
 };
 
 /**
@@ -74,38 +80,35 @@ export const initiateScan = async (
  * @returns كائن الفحص مع تفاصيله.
  */
 export const getScanById = async (userId: string, scanId: string) => {
-  // --- التعديل الثاني: فصل التحقق ---
-  // 1. ابحث عن الفحص أولاً.
+  // 1. ابحث عن الفحص. لم نعد بحاجة لتضمين الهدف.
   const scan = await prisma.scan.findUnique({
     where: { id: scanId },
     include: {
-      vulnerabilities: true,
-      target: true, // قم بتضمين الهدف للحصول على organizationId
+      vulnerabilities: true, // ما زلنا نريد رؤية الثغرات
     },
   });
 
-  // إذا لم يتم العثور على الفحص، أرسل خطأ 404 واضح.
   if (!scan) {
     throw new NotFoundError('Scan not found');
   }
 
-  // 2. الآن بعد أن تأكدنا من وجود الفحص، تحقق من صلاحيات المستخدم.
+  // 2. تحقق من الصلاحيات باستخدام الحقل المباشر.
   const membership = await prisma.membership.findUnique({
     where: {
       userId_organizationId: {
         userId: userId,
-        organizationId: scan.target.organizationId,
+        organizationId: scan.organizationId, // <-- التصحيح هنا. استخدم الحقل المباشر.
       },
     },
   });
 
-  // إذا لم يكن المستخدم عضوًا، أرسل خطأ 403 واضح.
   if (!membership) {
     throw new ForbiddenError('You do not have permission to view this scan');
   }
 
   return scan;
 };
+
 
 /**
  * يجلب قائمة بجميع الفحوصات لمنظمة معينة.
@@ -114,8 +117,6 @@ export const getScanById = async (userId: string, scanId: string) => {
  * @returns قائمة بالفحوصات.
  */
 export const listScansForOrg = async (userId: string, organizationId: string) => {
-  // هذا الكود كان صحيحًا بالفعل ولا يحتاج إلى تعديل.
-  // يتحقق أولاً من العضوية، ثم يجلب البيانات.
   const membership = await prisma.membership.findUnique({
     where: {
       userId_organizationId: {
@@ -129,11 +130,10 @@ export const listScansForOrg = async (userId: string, organizationId: string) =>
     throw new ForbiddenError('You are not a member of this organization');
   }
 
+  // لقد قمت بإضافة organizationId مباشرة إلى Scan, لذا يمكننا تبسيط هذا الاستعلام
   const scans = await prisma.scan.findMany({
     where: {
-      target: {
-        organizationId: organizationId,
-      },
+      organizationId: organizationId, // <-- أصبح الاستعلام أبسط الآن
     },
     include: {
       target: {

@@ -6,7 +6,7 @@ import * as scanController from '../controllers/scans';
 
 const router = Router();
 
-// --- قواعد التحقق (Validation Rules) ---
+// --- Validation Rules (These are correct, no changes needed) ---
 
 const createScanValidation = [
   body('targetId')
@@ -33,12 +33,13 @@ const getScanValidation = [
 ];
 
 
-// --- تعريف المسارات (Routes) مع توثيق Swagger ---
+// --- Route Definitions with Updated Swagger Documentation ---
+
 /**
  * @swagger
  * /scans:
  *   post:
- *     summary: Yeni bir tarama başlatır (Initiates a new scan)
+ *     summary: Queues a new scan for execution
  *     tags: [Scans]
  *     security:
  *       - bearerAuth: []
@@ -50,30 +51,29 @@ const getScanValidation = [
  *             $ref: '#/components/schemas/CreateScanInput'
  *     responses:
  *       201:
- *         description: Tarama başarıyla başlatıldı ve sıraya alındı.
+ *         description: Scan was successfully queued. The response contains the initial scan record.
  *         content:
  *           application/json:
  *             schema:
  *               type: object
  *               properties:
- *                 message: { type: string }
+ *                 message: { type: string, example: "Scan successfully queued for execution." }
  *                 data:
  *                   $ref: '#/components/schemas/Scan'
  *       400:
- *         description: 'Geçersiz istek (örn: eksik targetId).'
+ *         description: 'Invalid request (e.g., missing targetId).'
  *       403:
- *         description: Bu hedefi tarama izniniz yok.
+ *         description: You do not have permission to scan this target.
  *       404:
- *         description: Hedef veya tarama yapılandırması bulunamadı.
+ *         description: Target or scan configuration not found.
  */
-
 router.post('/', kimlikDoğrula, createScanValidation, scanController.createScan);
 
 /**
  * @swagger
  * /scans:
  *   get:
- *     summary: Belirli bir organizasyon için tüm taramaları listeler (Lists all scans for an organization)
+ *     summary: Lists all scans for a specific organization
  *     tags: [Scans]
  *     security:
  *       - bearerAuth: []
@@ -83,10 +83,10 @@ router.post('/', kimlikDoğrula, createScanValidation, scanController.createScan
  *         schema:
  *           type: string
  *         required: true
- *         description: Taramaları listelenecek organizasyonun kimliği.
+ *         description: The ID of the organization to list scans for.
  *     responses:
  *       200:
- *         description: Taramaların listesi başarıyla alındı.
+ *         description: A list of scans was successfully retrieved.
  *         content:
  *           application/json:
  *             schema:
@@ -97,7 +97,7 @@ router.post('/', kimlikDoğrula, createScanValidation, scanController.createScan
  *                   items:
  *                     $ref: '#/components/schemas/Scan'
  *       403:
- *         description: Bu organizasyonun üyesi değilsiniz.
+ *         description: You are not a member of this organization.
  */
 router.get('/', kimlikDoğrula, listScansValidation, scanController.listScans);
 
@@ -105,7 +105,7 @@ router.get('/', kimlikDoğrula, listScansValidation, scanController.listScans);
  * @swagger
  * /scans/{id}:
  *   get:
- *     summary: Belirli bir taramanın detaylarını getirir (Gets details of a specific scan)
+ *     summary: Gets the details of a specific scan
  *     tags: [Scans]
  *     security:
  *       - bearerAuth: []
@@ -115,10 +115,10 @@ router.get('/', kimlikDoğrula, listScansValidation, scanController.listScans);
  *         schema:
  *           type: string
  *         required: true
- *         description: Detayları alınacak taramanın benzersiz kimliği.
+ *         description: The unique ID of the scan to retrieve.
  *     responses:
  *       200:
- *         description: Tarama detayları başarıyla alındı.
+ *         description: Scan details were successfully retrieved.
  *         content:
  *           application/json:
  *             schema:
@@ -127,9 +127,9 @@ router.get('/', kimlikDoğrula, listScansValidation, scanController.listScans);
  *                 data:
  *                   $ref: '#/components/schemas/Scan'
  *       403:
- *         description: Bu taramayı görüntüleme izniniz yok.
+ *         description: You do not have permission to view this scan.
  *       404:
- *         description: Belirtilen kimliğe sahip tarama bulunamadı.
+ *         description: A scan with the specified ID was not found.
  */
 router.get('/:id', kimlikDoğrula, getScanValidation, scanController.getScan);
 
