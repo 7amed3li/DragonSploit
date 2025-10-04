@@ -105,6 +105,7 @@ model Scan {
   startedAt   DateTime?
   completedAt DateTime?
   createdAt   DateTime   @default(now())
+  technologyFingerprint Json? 
 
   // --- العلاقات ---
   target          Target           @relation(fields: [targetId], references: [id], onDelete: Cascade)
