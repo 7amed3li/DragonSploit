@@ -15,6 +15,15 @@ datasource db {
 // ========================================
 // 1. نماذج المصادقة وإدارة المستخدمين
 // ========================================
+model RefreshToken {
+  id        String   @id @default(cuid())
+  hashedToken String   @unique
+  userId    String
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  revoked   Boolean  @default(false)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+} 
 
 model User {
   id        String   @id @default(cuid())
@@ -28,6 +37,7 @@ model User {
   memberships Membership[] // المستخدم يمكن أن يكون عضوًا في عدة مساحات عمل
   invitations Invitation[] @relation("UserInvitations")
   auditLogs   AuditLog[]
+  refreshTokens RefreshToken[]
 
 }
 

@@ -1,8 +1,16 @@
+// src/index.ts
+
+// الطريقة الأكثر ضمانًا: استدعاء dotenv بشكل صريح في البداية
+import dotenv from 'dotenv';
+dotenv.config();
+
+// الآن نستورد باقي المكتبات والملفات
 import express, { Express, Request, Response, NextFunction } from 'express';
 import { PrismaClient } from '@prisma/client';
 import { Server } from 'http';
 import cors from 'cors';
-import 'dotenv/config';
+import cookieParser from 'cookie-parser';
+
 import { AppError } from './utils/errors';
 
 // --- Import Routers ---
@@ -11,11 +19,13 @@ import organizationRouter from './routes/kurum';
 import targetRouter from './routes/target';
 import scanRouter from './routes/scans';
 
-// --- Import Swagger Setup ---
+// --- Import Swagger and Worker Loader ---
 import { setupSwagger } from './swagger';
+// المسار الصحيح لملف تحميل العمال
+import { startWorkers } from './worker/worker-loader'; 
 
 // --- Initialization ---
-const app: Express = express( );
+export const app: Express = express( );
 const prisma = new PrismaClient();
 
 // --- Main Application Function ---
@@ -28,6 +38,7 @@ async function main() {
   // --- Middlewares ---
   app.use(cors());
   app.use(express.json());
+  app.use(cookieParser());
 
   // --- Swagger Setup ---
   setupSwagger(app);
@@ -41,41 +52,39 @@ async function main() {
   app.use('/api/targets', targetRouter);
   app.use('/api/scans', scanRouter);
 
-  // --- Global Error Handler (LOUD VERSION) ---
-  // --- بداية التعديل ---
+  // --- Global Error Handler ---
   app.use((err: Error, req: Request, res: Response, next: NextFunction) => {
-    console.log('!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!');
-    console.log('!!!!!!!!!! AN ERROR WAS CAUGHT !!!!!!!!!!!!!');
-    console.log('!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!');
-    console.error(err); // اطبع الخطأ الكامل
-    console.log('!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!');
-    console.log('!!!!!!!!!! END OF ERROR !!!!!!!!!!!!!!!!!!');
-    console.log('!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!');
-
+    if (!(err instanceof AppError)) {
+        console.log('!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!');
+        console.log('!!!!!!!!!! AN ERROR WAS CAUGHT !!!!!!!!!!!!!');
+        console.log('!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!');
+        console.error(err);
+        console.log('!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!');
+        console.log('!!!!!!!!!! END OF ERROR !!!!!!!!!!!!!!!!!!');
+        console.log('!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!');
+    }
     if (err instanceof AppError) {
       return res.status(err.statusCode).json({ message: err.message });
     }
-
     return res.status(500).json({ message: 'An unexpected server error occurred.' });
   });
-  // --- نهاية التعديل ---
 
-  // --- Start Server ---
+  // --- Start Server and Workers ---
   const PORT = process.env.PORT || 3001;
-  const server: Server = app.listen(PORT, () => {
+  app.listen(PORT, () => {
     console.log(`🚀 API Server is running on http://localhost:${PORT}` );
+    
+    // --- بداية التعديل الرئيسي ---
+    // بعد أن يعمل الخادم بنجاح، قم ببدء تشغيل العمال
+    startWorkers();
+    // --- نهاية التعديل الرئيسي ---
   });
 
   // --- Graceful Shutdown Handler ---
   const handleShutdown = (signal: string) => {
     console.log(`Signal received (${signal}). Shutting down gracefully...`);
-    server.close(() => {
-      console.log('HTTP server closed.');
-      prisma.$disconnect().then(() => {
-        console.log('Database connection disconnected.');
-        process.exit(0);
-      });
-    });
+    // يجب إغلاق الخادم والعمال هنا، لكن سنبسطها الآن
+    process.exit(0);
   };
 
   process.on('SIGTERM', () => handleShutdown('SIGTERM'));

@@ -8,13 +8,39 @@ const options: swaggerJSDoc.Options = {
     info: {
       title: 'DragonSploit API',
       version: '1.0.0',
-      description: 'Comprehensive documentation for the DragonSploit REST API.',
+      description: 
+        'The official REST API for the DragonSploit Platform, an intelligent and context-aware vulnerability scanning solution. ' +
+        'This API allows for the management of users, organizations, targets, and scans.',
+      contact: {
+        name: 'Hamed Mohammed Abdulaleem Kamel',
+        email: 'hly804541@gmail.com', // يمكنك تغييره
+      },
     },
+    // ✅ الإصلاح الحاسم: تم حذف /api من هنا
     servers: [
       {
-        // تأكد من أن هذا الرابط يطابق المنفذ الذي يعمل عليه الخادم
-        url: `http://localhost:3001/api`,
+        url: `http://localhost:3001`, 
+        description: 'Development Server'
       },
+    ],
+    // ✨ إضافة: وصف للوسوم لتنظيم الواجهة
+    tags: [
+        {
+            name: 'Auth',
+            description: 'Endpoints for user authentication (register, login, logout, refresh token ).'
+        },
+        {
+            name: 'Organizations',
+            description: 'Endpoints for managing user organizations.'
+        },
+        {
+            name: 'Targets',
+            description: 'Endpoints for managing scan targets (URLs).'
+        },
+        {
+            name: 'Scans',
+            description: 'Endpoints for initiating and managing security scans.'
+        }
     ],
     components: {
       securitySchemes: {
@@ -22,73 +48,57 @@ const options: swaggerJSDoc.Options = {
           type: 'http',
           scheme: 'bearer',
           bearerFormat: 'JWT',
+          description: 'Enter JWT token',
         },
       },
       schemas: {
         // ========================================
-        // --- Scan Models ---
+        // --- Input Models ---
         // ========================================
-        Scan: {
+        RegisterInput: {
           type: 'object',
+          required: ['email', 'name', 'password'],
           properties: {
-            id: { type: 'string', description: 'Unique scan identifier.' },
-            status: { type: 'string', enum: ['PENDING', 'QUEUED', 'RUNNING', 'COMPLETED', 'FAILED', 'CANCELED'], description: 'The current status of the scan.' },
-            targetId: { type: 'string', description: 'ID of the associated target.' },
-            organizationId: { type: 'string', description: 'ID of the owning organization.' }, // <-- إضافة مهمة
-            configurationId: { type: 'string', nullable: true, description: 'ID of the scan configuration used (optional ).' },
-            startedAt: { type: 'string', format: 'date-time', nullable: true },
-            completedAt: { type: 'string', format: 'date-time', nullable: true },
-            createdAt: { type: 'string', format: 'date-time' },
+            email: { type: 'string', format: 'email', example: 'user@example.com' },
+            name: { type: 'string', example: 'John Doe' },
+            password: { type: 'string', format: 'password', example: 'Password123!' },
           },
         },
-        Vulnerability: {
+        LoginInput: {
           type: 'object',
+          required: ['email', 'password'],
           properties: {
-            id: { type: 'string' },
-            type: { type: 'string', description: 'Type of vulnerability (e.g., "XSS").' },
-            severity: { type: 'string', enum: ['INFO', 'LOW', 'MEDIUM', 'HIGH', 'CRITICAL'] },
-            description: { type: 'string' },
-            proof: { type: 'string', description: 'Proof of the vulnerability.' },
-            isResolved: { type: 'boolean' },
-            foundAt: { type: 'string', format: 'date-time' },
+            email: { type: 'string', format: 'email', example: 'user@example.com' },
+            password: { type: 'string', format: 'password', example: 'Password123!' },
           },
         },
-        ScanConfiguration: {
-          type: 'object',
-          properties: {
-            id: { type: 'string' },
-            name: { type: 'string', description: 'Name of the configuration template (e.g., "Quick XSS Scan").' },
-            isDiscoveryFocused: { type: 'boolean' },
-            isAiPowered: { type: 'boolean' },
-            organizationId: { type: 'string', description: 'ID of the owning organization.' },
-          },
+        CreateTargetInput: {
+            type: 'object',
+            required: ['name', 'url', 'organizationId'],
+            properties: {
+                name: { type: 'string', example: 'My Production API' },
+                url: { type: 'string', format: 'url', example: 'https://api.example.com' },
+                organizationId: { type: 'string', format: 'uuid', example: 'clq1...'}
+            }
         },
         CreateScanInput: {
           type: 'object',
           required: ['targetId'],
           properties: {
             targetId: { type: 'string', description: 'ID of the target to be scanned.' },
-            configurationId: { type: 'string', description: 'ID of the scan configuration to use (optional).' },
-          },
-        },
-        ListScansQuery: {
-          type: 'object',
-          required: ['organizationId'],
-          properties: {
-            organizationId: { type: 'string', description: 'ID of the organization to list scans for.' },
+            configurationId: { type: 'string', description: 'ID of the scan configuration to use (optional ).' },
           },
         },
 
         // ========================================
-        // --- Existing Models ---
+        // --- Data Models ---
         // ========================================
-        Target: {
+        User: {
           type: 'object',
           properties: {
-            id: { type: 'string', description: "The target's unique identifier." },
-            name: { type: 'string', description: "The target's name." },
-            url: { type: 'string', format: 'url', description: "The URL to be scanned." },
-            organizationId: { type: 'string', format: 'uuid', description: "ID of the owning organization." },
+            id: { type: 'string' },
+            email: { type: 'string', format: 'email' },
+            name: { type: 'string' },
             createdAt: { type: 'string', format: 'date-time' },
             updatedAt: { type: 'string', format: 'date-time' },
           },
@@ -103,33 +113,58 @@ const options: swaggerJSDoc.Options = {
             updatedAt: { type: 'string', format: 'date-time' },
           },
         },
-        User: {
+        Target: {
           type: 'object',
           properties: {
             id: { type: 'string' },
-            email: { type: 'string', format: 'email' },
             name: { type: 'string' },
+            url: { type: 'string', format: 'url' },
+            organizationId: { type: 'string', format: 'uuid' },
             createdAt: { type: 'string', format: 'date-time' },
             updatedAt: { type: 'string', format: 'date-time' },
           },
         },
-        RegisterInput: {
+        Scan: {
           type: 'object',
-          required: ['email', 'name', 'password'],
           properties: {
-            email: { type: 'string', format: 'email' },
-            name: { type: 'string' },
-            password: { type: 'string', format: 'password' },
+            id: { type: 'string' },
+            status: { type: 'string', enum: ['PENDING', 'QUEUED', 'RUNNING', 'COMPLETED', 'FAILED', 'CANCELED'] },
+            targetId: { type: 'string' },
+            organizationId: { type: 'string' },
+            configurationId: { type: 'string', nullable: true },
+            startedAt: { type: 'string', format: 'date-time', nullable: true },
+            completedAt: { type: 'string', format: 'date-time', nullable: true },
+            createdAt: { type: 'string', format: 'date-time' },
           },
         },
-        LoginInput: {
-          type: 'object',
-          required: ['email', 'password'],
-          properties: {
-            email: { type: 'string', format: 'email' },
-            password: { type: 'string', format: 'password' },
-          },
+        
+        // ========================================
+        // --- Error Models (✨ إضافة جديدة) ---
+        // ========================================
+        Error400: {
+            type: 'object',
+            properties: { message: { type: 'string', example: 'Invalid request body' } }
         },
+        Error401: {
+            type: 'object',
+            properties: { message: { type: 'string', example: 'Authentication failed' } }
+        },
+        Error403: {
+            type: 'object',
+            properties: { message: { type: 'string', example: 'You do not have permission to perform this action' } }
+        },
+        Error404: {
+            type: 'object',
+            properties: { message: { type: 'string', example: 'Resource not found' } }
+        },
+        Error409: {
+            type: 'object',
+            properties: { message: { type: 'string', example: 'Conflict: Resource already exists' } }
+        },
+        Error500: {
+            type: 'object',
+            properties: { message: { type: 'string', example: 'Internal Server Error' } }
+        }
       },
     },
     security: [
@@ -138,24 +173,16 @@ const options: swaggerJSDoc.Options = {
       },
     ],
   },
-  // --- بداية التعديل ---
-  // هذا المسار يضمن أن swagger يقرأ جميع ملفات .ts داخل مجلد routes
   apis: ['./src/routes/**/*.ts'],
-  // --- نهاية التعديل ---
 };
 
 const swaggerSpec = swaggerJSDoc(options);
 
-// تم تغيير اسم الدالة ليكون بالإنجليزية
 export function setupSwagger(app: Express) {
-  // المسار الذي ستظهر فيه واجهة المستخدم
   app.use('/api-docs', swaggerUi.serve, swaggerUi.setup(swaggerSpec));
-  
-  // المسار الذي يوفر ملف JSON الخام للمواصفات
   app.get('/api-docs.json', (req, res) => {
     res.setHeader('Content-Type', 'application/json');
     res.send(swaggerSpec);
   });
-
-  console.log(`📚 Swagger UI is available at /api-docs`);
+  console.log(`📚 Swagger UI is available at http://localhost:3001/api-docs` );
 }

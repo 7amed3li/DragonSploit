@@ -1,6 +1,6 @@
 import { PrismaClient, ScanStatus } from '@prisma/client';
 import { ForbiddenError, NotFoundError } from '../utils/errors';
-import { scanQueue } from '../worker/queues/scan.queue'; 
+import { scanQueue } from '../worker/queues/scan'; 
 
 const prisma = new PrismaClient();
 

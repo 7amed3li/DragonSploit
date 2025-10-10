@@ -312,3 +312,71 @@ Prisma was chosen over other ORMs (TypeORM, Sequelize) due to its superior type-
 *   Flesh out the actual scanning logic within the `scan.processor.ts`.
 *   Start with "Phase 1: Technology Fingerprinting" by making an HTTP request to the target URL and analyzing the response.
 *   Integrate `axios` to handle HTTP requests.
+
+
+
+---
+# 📅 **2025-10-04: The Nervous System — Building the Orchestrator and its Specialist Army**
+
+**Title:** Architectural Leap: From a Single Worker to a Multi-Agent System
+**Context:** The project reached a pivotal moment where the simple "one job, one worker" model was insufficient for DragonSploit’s vision of context-aware, adaptive scanning.
+
+---
+
+## 🔧 Decision: Major architectural refactor — Orchestrator → Specialist model
+
+* **Choice:** Promote the primary worker into a strategic **Orchestrator**, and create a fleet of **specialist workers** that execute targeted actions.
+* **Rationale:** Move from a linear task-runner to a context-aware central nervous system that can reason about intent, fingerprint targets, and dispatch highly specific sub-jobs.
+
+---
+
+## 🛠 Implementation: The Smart Orchestrator (`scan.ts`)
+
+* **Responsibilities (promoted role):**
+
+  * **Reconnaissance:** Perform initial technology fingerprinting on the target.
+  * **Analysis & Decision:** Analyze fingerprint results and choose the best exploitation/scan strategy.
+  * **Task Delegation:** Dispatch domain-specific jobs to specialist queues (actions derived from analysis).
+
+* **Example dispatch rules:**
+
+  * If WordPress detected → push job to `wordpressQueue`.
+  * If Nginx detected → push job to `nginxQueue`.
+  * Generic vulnerability checks (e.g., SQLi, XSS) → push to `sqliQueue`, `xssQueue`.
+
+---
+
+## 🛡 Implementation: The Specialist Army Infrastructure
+
+* **Worker Fleet (modules, each with its own processor & queue):**
+
+  * **Framework Specialists:** `wordpress.ts`, `laravel.ts`, `drupal.ts`
+  * **Web-Server Specialists:** `nginx.ts`, `apache.ts`
+  * **Vulnerability-Type Specialists:** `sqli.ts`, `xss.ts`
+* **Unified Entry Point:** `src/worker.ts` — initializes and runs the entire fleet concurrently, simplifying orchestration and management.
+* **Design Principles Applied:**
+
+  * **Separation of Concerns:** Each worker is independent; changes to one do not affect others.
+  * **Modularity & Extensibility:** Easy to add new specialists for new technologies.
+  * **Scalability:** Ability to run many specialist workers in parallel and scale horizontally.
+
+---
+
+✅ **Milestone Achieved**
+
+* Designed and built a complex, multi-agent, event-driven scanning engine.
+* Transitioned the system from a linear processor to a dynamic network of micro-services communicating via Redis/BullMQ.
+* An API request now triggers the Orchestrator to analyze targets and dispatch up to **7 parallel sub-jobs** handled by **8 concurrently running worker modules**.
+* This foundational architecture realizes DragonSploit’s vision of an intelligent, scalable scanning platform.
+
+---
+
+🚀 **Next Steps**
+
+1. **"Arm" the soldiers:** Replace placeholder simulations with real scanning logic inside specialist workers.
+2. **Phase 1 Implementation target:** Start with `sqli.ts` — implement real SQLi detection & proof-of-concept exploit checks.
+3. **Instrumentation & Observability:** Add metrics/logging per worker (job latencies, failure rates) to monitor the multi-agent system.
+4. **Safety & Throttling:** Implement rate limits and safe-mode flags in the Orchestrator to prevent noisy scans.
+5. **Extendability:** Define a clear worker registration contract so new specialists can be added with minimal integration work.
+
+---
