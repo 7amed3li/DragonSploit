@@ -1,14 +1,14 @@
 // prisma/schema.prisma
 
 generator client {
-  provider      = "prisma-client-js"
+  provider        = "prisma-client-js"
   binaryTargets = ["native", "linux-musl-openssl-3.0.x"]
 }
 
 
 datasource db {
-  provider = "postgresql"
-  url      = env("DATABASE_URL")
+  provider  = "postgresql"
+  url       = env("DATABASE_URL")
   directUrl = env("DATABASE_URL")
 }
 
@@ -16,47 +16,49 @@ datasource db {
 // 1. نماذج المصادقة وإدارة المستخدمين
 // ========================================
 model RefreshToken {
-  id        String   @id @default(cuid())
+  id          String   @id @default(cuid())
   hashedToken String   @unique
-  userId    String
-  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
-  revoked   Boolean  @default(false)
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
+  userId      String
+  user        User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  revoked     Boolean  @default(false)
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
 } 
 
 model User {
-  id        String   @id @default(cuid())
-  email     String   @unique
-  name      String?
-  password  String
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
+  id          String   @id @default(cuid())
+  email       String   @unique
+  name        String?
+  password    String
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
 
   // --- العلاقات ---
   memberships Membership[] // المستخدم يمكن أن يكون عضوًا في عدة مساحات عمل
   invitations Invitation[] @relation("UserInvitations")
   auditLogs   AuditLog[]
   refreshTokens RefreshToken[]
-
+  
+  // 🆕 علاقة المستخدم الذي يقوم بحل الثغرة
+  resolvedVulnerabilities Vulnerability[] @relation("ResolvedVulnerability")
 }
 
 model Organization {
-  id        String   @id @default(cuid())
-  name      String
-  slug      String   @unique // رابط فريد للمنظمة مثل "my-company"
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
+  id          String   @id @default(cuid())
+  name        String
+  slug        String   @unique // رابط فريد للمنظمة مثل "my-company"
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
   scanConfigurations ScanConfiguration[]
 
   // --- العلاقات ---
-  members   Membership[]
+  members     Membership[]
   invitations Invitation[]
-  targets   Target[]
-  reports   Report[]
+  targets     Target[]
+  reports     Report[]
   apiTokens ApiToken[]
   auditLogs AuditLog[]
-  scans     Scan[]
+  scans       Scan[]
 }
 
 model Membership {
@@ -65,7 +67,7 @@ model Membership {
   createdAt      DateTime @default(now())
 
   // --- العلاقات ---
-  user           User         @relation(fields: [userId], references: [id], onDelete: Cascade)
+  user           User       @relation(fields: [userId], references: [id], onDelete: Cascade)
   userId         String
   organization   Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
   organizationId String
@@ -84,7 +86,7 @@ model Invitation {
   // --- العلاقات ---
   organization   Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
   organizationId String
-  invitedBy      User         @relation("UserInvitations", fields: [invitedById], references: [id])
+  invitedBy      User           @relation("UserInvitations", fields: [invitedById], references: [id])
   invitedById    String
   
   @@unique([email, organizationId]) // لا يمكن دعوة نفس البريد الإلكتروني مرتين لنفس المنظمة
@@ -95,11 +97,11 @@ model Invitation {
 // ========================================
 
 model Target {
-  id          String   @id @default(cuid())
-  url         String
-  name        String
-  createdAt   DateTime @default(now())
-  updatedAt   DateTime @updatedAt
+  id           String   @id @default(cuid())
+  url          String
+  name         String
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
 
   // --- العلاقات ---
   organization   Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
@@ -107,6 +109,7 @@ model Target {
   scans          Scan[]
   
   @@unique([url, organizationId]) // لا يمكن إضافة نفس الهدف مرتين في نفس المنظمة
+  @@index([organizationId, name]) // 🆕 فهرس لتحسين البحث عن الأهداف في المنظمة
 }
 
 model Scan {
@@ -115,39 +118,51 @@ model Scan {
   startedAt   DateTime?
   completedAt DateTime?
   createdAt   DateTime   @default(now())
-  technologyFingerprint Json? 
-
+  
+  // technologyFingerprint Json? // ❌ تم التغيير
+  technologyFingerprint String? @db.Text // ✅ الجديد: تخزينه كنص واضح لدعم AI Context
+  
   // --- العلاقات ---
-  target          Target           @relation(fields: [targetId], references: [id], onDelete: Cascade)
-  targetId        String
-    
-  organization   Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
-  organizationId String
-  vulnerabilities Vulnerability[]
-  report          Report?          // الفحص الواحد يمكن أن يكون له تقرير واحد
-  configuration   ScanConfiguration? @relation(fields: [configurationId], references: [id])
-  configurationId String?
+  target             Target             @relation(fields: [targetId], references: [id], onDelete: Cascade)
+  targetId           String
+  
+  organization       Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  organizationId     String
+  vulnerabilities    Vulnerability[]
+  report             Report?            // الفحص الواحد يمكن أن يكون له تقرير واحد
+  configuration      ScanConfiguration? @relation(fields: [configurationId], references: [id])
+  configurationId    String?
+
+  @@index([organizationId, status]) // 🆕 فهرس لتحسين تصفية الفحوصات حسب الحالة في المنظمة
 }
 
 model Vulnerability {
-  id          String   @id @default(cuid())
-  type        String   // "XSS", "SQL Injection"
-  severity    Severity @default(MEDIUM)
-  description String   @db.Text
-  proof       String   @db.Text // دليل الإثبات (قد يكون طويلاً)
-  isResolved  Boolean  @default(false)
-  foundAt     DateTime @default(now())
+  id             String            @id @default(cuid())
+  // type           String            // ❌ تم التغيير
+  type           VulnerabilityType // ✅ الجديد: استخدام تعداد لنوع الثغرة لضمان دقة البيانات
+  severity       Severity          @default(MEDIUM)
+  description    String            @db.Text
+  proof          String            @db.Text // دليل الإثبات (قد يكون طويلاً)
+  isResolved     Boolean           @default(false)
+  foundAt        DateTime          @default(now())
+  resolvedAt     DateTime?         // 🆕 متى تم الحل
+  resolvedByUserId String?         // 🆕 من قام بالحل
 
   // --- العلاقات ---
-  scan    Scan     @relation(fields: [scanId], references: [id], onDelete: Cascade)
-  scanId  String
+  scan             Scan              @relation(fields: [scanId], references: [id], onDelete: Cascade)
+  scanId           String
+  
+  // 🆕 علاقة المستخدم الذي قام بالحل
+  resolvedByUser   User?             @relation("ResolvedVulnerability", fields: [resolvedByUserId], references: [id])
+  
+  @@index([scanId, severity]) // 🆕 فهرس لتحسين فلترة الثغرات حسب الفحص والخطورة
 }
 
 model ScanConfiguration {
-  id                String  @id @default(cuid())
-  name              String  // "Full Scan", "Quick XSS Check"
+  id                 String  @id @default(cuid())
+  name               String  // "Full Scan", "Quick XSS Check"
   isDiscoveryFocused Boolean @default(true)
-  isAiPowered       Boolean @default(true)
+  isAiPowered        Boolean @default(true)
   
   scans Scan[]
   
@@ -160,14 +175,14 @@ model ScanConfiguration {
 // ========================================
 
 model Report {
-  id        String   @id @default(cuid())
-  format    String   // "PDF", "JSON", "HTML"
-  storagePath String // مسار تخزين الملف (مثل S3 URL)
-  createdAt DateTime @default(now())
+  id             String   @id @default(cuid())
+  format         String   // "PDF", "JSON", "HTML"
+  storagePath    String   // مسار تخزين الملف (مثل S3 URL)
+  createdAt      DateTime @default(now())
 
   // --- العلاقات ---
-  scan           Scan         @relation(fields: [scanId], references: [id])
-  scanId         String       @unique // كل تقرير مرتبط بفحص واحد فقط
+  scan             Scan           @relation(fields: [scanId], references: [id])
+  scanId           String         @unique // كل تقرير مرتبط بفحص واحد فقط
   organization   Organization @relation(fields: [organizationId], references: [id])
   organizationId String
 }
@@ -198,10 +213,12 @@ model AuditLog {
   createdAt      DateTime @default(now())
 
   // --- العلاقات ---
-  user           User         @relation(fields: [userId], references: [id])
-  userId         String
+  user             User           @relation(fields: [userId], references: [id])
+  userId           String
   organization   Organization @relation(fields: [organizationId], references: [id])
   organizationId String
+
+  @@index([organizationId, createdAt(sort: Desc)]) // 🆕 فهرس لتحسين عرض سجلات التدقيق الأخيرة
 }
 
 
@@ -236,4 +253,13 @@ enum Severity {
   MEDIUM
   HIGH
   CRITICAL
+}
+
+// 🆕 التعداد الجديد لأنواع الثغرات
+enum VulnerabilityType {
+  SQL_INJECTION
+  CROSS_SITE_SCRIPTING
+  RCE
+  INFO_DISCLOSURE
+  OTHER
 }
