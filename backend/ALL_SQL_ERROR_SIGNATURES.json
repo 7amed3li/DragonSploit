@@ -1,0 +1,152 @@
+{
+  "SQLI_SIGNATURES_DICTIONARY": {
+    
+    // ====================================================================================
+    // 💡 الفئة 1-3: توقيعات SQLite الأساسية - عالية ومتوسطة الثقة وأخطاء الـ Wrappers
+    //    (Core SQLite - High/Medium Confidence & Host Language Wrappers)
+    // ====================================================================================
+    
+    "SQLITE_CORE_HIGH_CONFIDENCE": [
+      "unrecognized token:", // Why: The most common and direct syntax error from SQLite's parser. Payload: `1'`
+      "near \".\": syntax error", // Why: Pinpoints the exact location of the syntax failure right after a dot. Payload: `1 AND 1=1.`
+      "near \"(\": syntax error", // Why: Indicates a syntax error near an opening parenthesis. Payload: `1) AND 1=1--`
+      "sql error or missing database", // Why: General error code (SQLITE_ERROR) often triggered by malformed injection. Payload: `1' AND 1=1--`
+      "syntax error", // Why: The most generic but highly reliable indicator of an attempted, failed SQL injection. Payload: `'`
+      "no such function:", // Why: Triggered by injecting a non-existent function. Payload: `' AND nonexistent_func(1)=1--`
+      "misuse of aggregate function" // Why: Can be intentionally triggered by using an aggregate function incorrectly. Payload: `' AND COUNT(*)=1--`
+    ],
+    
+    "SQLITE_CORE_MEDIUM_CONFIDENCE": [
+      "no such table:", // Why: Confirms query execution and allows for schema enumeration attempts. Payload: `' UNION SELECT 1,2,3 FROM non_existent_table--`
+      "no such column:", // Why: Confirms query execution and allows for column enumeration attempts. Payload: `' AND (SELECT col FROM non_existent_table) IS NULL--`
+      "datatype mismatch", // Why: Can be triggered by forcing a type comparison failure. Payload: `' AND 1=CAST('A' AS INT)--`
+      "constraint failed", // Why: Occurs upon an INSERT/UPDATE violation (e.g., unique key violation). Payload: `' OR 1=1; INSERT INTO users (id, name) VALUES (1, 'a');--`
+      "too many terms in compound select" // Why: Occurs during an UNION SELECT attack where the number of columns is not balanced. Payload: `' UNION SELECT 1,2,3,4--`
+    ],
+    
+    "SQLITE_HOST_WRAPPER_ERRORS": [
+      "SQLITE_CONSTRAINT", // Why: Generic error code constant often reported by high-level drivers (Python/PHP) for constraint violations. Payload: `' OR 1=1; INSERT INTO test (val) VALUES ('x');--`
+      "invalid number of bindings", // Why: Specific to drivers using prepared statements (e.g., Python/Node.js) when parameter counts don't match. Payload: `' UNION SELECT 1,2,3--`
+      "database is locked", // Why: A file-level operational error (SQLITE_BUSY) confirming active database access. Payload: `' AND 1=1--`
+      "sqlite3.OperationalError", // Why: The specific exception class name thrown by the Python `sqlite3` module. Payload: `' UNION SELECT 1,2--`
+      "PDOException: SQLSTATE" // Why: Generic error from the PHP Data Objects (PDO) wrapper. Payload: `'`
+    ],
+    
+    // ====================================================================================
+    // 💡 الفئة 5-6: توقيعات SQLite المتقدمة وأخطاء نظام الملفات
+    //    (Advanced SQLite & File System Errors)
+    // ====================================================================================
+    
+    "SQLITE_ADVANCED_FUNCTIONS_ERRORS": [
+      "window functions are not supported", // Why: Indicates an old SQLite version (<3.25.0). Payload: `' AND 1=1 ORDER BY 1 WINDOW w AS (PARTITION BY 1)--`
+      "incorrect number of arguments to function", // Why: Highly precise error indicating that a recognized function was called with wrong parameters. Payload: `' AND substr(1,2,3,4)=1--`
+      "result of subquery is not a single row", // Why: Confirms a subquery returned multiple rows where only one was expected. Payload: `' AND 1=(SELECT col FROM table_name)--`
+      "cannot VACUUM from within a transaction" // Why: Confirms injection of a control statement that violates transactional rules. Payload: `' AND 1=1; VACUUM;--`
+    ],
+    
+    "SQLITE_FILE_SYSTEM_ERRORS": [
+      "unable to open database file", // Why: Indicates the injected path or file operation failed due to incorrect path or permissions. Payload: `' ATTACH DATABASE '/etc/passwd' AS p--`
+      "disk I/O error", // Why: A low-level operational error confirming interaction with the filesystem. Payload: `' AND 1=1--`
+      "database is read-only", // Why: Confirms a write attempt (e.g., CREATE TABLE) was blocked by OS permissions. Payload: `' AND 1=1; CREATE TABLE test(a);--`
+      "not a database" // Why: Confirms an injected ATTACH pointed to a file that is not a valid SQLite format. Payload: `' ATTACH DATABASE '/etc/shadow' AS s--`
+    ],
+    
+    // ====================================================================================
+    // 💡 الفئة 9-11: توقيعات SQLite الأكثر تخصصًا وقيود النظام
+    //    (SQLite Niche & System Constraint Errors)
+    // ====================================================================================
+    
+    "SQLITE_PRAGMA_METADATA_FAILURES": [
+      "cannot change schema of table", // Why: Triggered by trying to execute a DDL command (like ALTER TABLE) on a reserved table. Payload: `' AND 1=1; ALTER TABLE users RENAME TO old_users;--`
+      "no such pragma:", // Why: Indicates an attempt to inject an unsupported PRAGMA command. Payload: `' AND 1=1; PRAGMA unknown_command;--`
+      "table sqlite_master may not be modified", // Why: Direct failure when an attacker tries to inject DML into the core schema table. Payload: `' AND 1=1; INSERT INTO sqlite_master VALUES (1,2,3,4,5);--`
+      "cannot convert text to integer", // Why: Highly specific type conversion failure, useful for probing. Payload: `' AND 1=CAST('a' AS INTEGER)--`
+      "cannot convert blob to text" // Why: Specific failure when trying to output or process BLOB data as text. Payload: `' UNION SELECT data_blob, 2, 3 FROM sensitive_table--`
+    ],
+    
+    "SQLITE_SYSTEM_CONSTRAINT_ERRORS": [
+      "maximum statement length exceeded", // Why: Confirms an injected query string was too long (default limit is high). Payload: `' UNION SELECT '... (1MB of junk data) ...'--`
+      "recursive trigger too deep", // Why: Highly advanced signature indicating an attacker successfully created a trigger that entered a deep recursion loop. Payload: (Complex DDL/Trigger injection)
+      "authorization denied" // Why: Very rare error indicating that the custom C API authorization function denied the operation (e.g., DROP, CREATE). Payload: `' AND 1=1; DROP TABLE users;--`
+    ],
+    
+    // ====================================================================================
+    // 💡 الفئة 4، 7، 12: توقيعات اللغات المتعددة (Multi-Lingual Signatures)
+    // ====================================================================================
+    
+    "SQLITE_MULTI_LINGUAL_SIGNATURES": [
+      // German (الألمانية)
+      "fehler in der sql-syntax", // Why: Translation of "error in the sql-syntax".
+      "keine solche tabelle:", // Why: Translation of "no such table:".
+      // Russian (الروسية)
+      "ошибка синтаксиса", // Why: Means "syntax error".
+      "нет такой таблицы", // Why: Means "no such table".
+      // Chinese (Simplified) (الصينية المبسطة)
+      "语法错误", // Why: Means "syntax error".
+      "无此表", // Why: Means "no such table".
+      // Spanish (الإسبانية)
+      "error de sintaxis sql", // Why: Direct translation of "sql syntax error".
+      "no existe la tabla:", // Why: Translation of "no such table:".
+      // Arabic (العربية)
+      "خطأ في بناء جملة sql", // Why: Direct translation of "SQL syntax error".
+      "لا يوجد جدول بهذا الاسم:", // Why: Translation of "no such table:".
+      // French (الفرنسية)
+      "erreur de syntaxe sql", // Why: Direct translation of "sql syntax error".
+      "aucune table de ce nom:", // Why: Translation of "no such table:".
+      // Japanese (اليابانية)
+      "構文エラー", // Why: Means "syntax error".
+      "そのようなテーブルはありません:", // Why: Translation of "no such table:".
+      // Portuguese (البرتغالية)
+      "erro de sintaxe sql", // Why: Direct translation of "sql syntax error".
+      "tabela inexistente:" // Why: Translation of "non-existent table:".
+    ],
+    
+    // ====================================================================================
+    // 💡 الفئة 13-16: توقيعات قواعد البيانات الشاملة (Universal Database Signatures)
+    //    (MySQL, PostgreSQL, MSSQL, NoSQL)
+    // ====================================================================================
+    
+    "MYSQL_ERROR_BASED_SIGNATURES": [
+      "XPATH syntax error", // Why: Highly reliable error from the EXTRACTVALUE/UPDATEXML function. Payload: `' AND EXTRACTVALUE(1, CONCAT(0x5c, (SELECT user())))--`
+      "Duplicate entry", // Why: Error generated by intentionally misusing GROUP BY (GROUP BY Error). Payload: `' AND (SELECT 1 FROM (SELECT COUNT(*), CONCAT(user(), FLOOR(RAND(0)*2))x FROM information_schema.tables GROUP BY x)a)--`
+      "You have an error in your SQL syntax", // Why: General MySQL syntax error.
+      "Division by zero" // Why: Can be intentionally triggered via `SELECT 1/0`.
+    ],
+    
+    "POSTGRESQL_ERROR_BASED_SIGNATURES": [
+      "invalid input value for enum", // Why: The golden method for outputting query results by forcing an invalid enum cast. Payload: `' AND 1=CAST((SELECT current_user) AS numeric)--` (forcing text to numeric)
+      "syntax error at or near", // Why: General PostgreSQL syntax error, highly precise location indicator.
+      "relation \"...\" does not exist", // Why: Equivalent to "no such table"; confirms query execution.
+      "could not serialize access" // Why: Error in concurrent transactions, can be triggered in advanced stacked queries.
+    ],
+    
+    "MSSQL_ERROR_BASED_SIGNATURES": [
+      "The conversion of a", // Why: The most common and reliable type conversion error used to embed query results. Payload: `' AND 1=CAST((SELECT DB_NAME()) AS int)--`
+      "Unclosed quotation mark", // Why: Direct syntax error.
+      "Syntax error near", // Why: General MSSQL syntax error, indicating the near keyword.
+      "XML parsing error" // Why: Advanced error triggered by using XML functions for data output.
+    ],
+    
+    "NOSQL_INJECTION_ERRORS": [
+      "BSON: bad type", // Why: Specific MongoDB error from attempting to insert an invalid data type (e.g., number instead of string) into a BSON query. Payload: `{'username': {'$ne': 1}}`
+      "SyntaxError: Unexpected token", // Why: General JavaScript error from injecting invalid JS code into a NoSQL/JS execution context (e.g., MongoDB).
+      "Error: EPIPE" // Why: A pipe error that can occur when a backend library is stressed or terminated due to an invalid/heavy query.
+    ],
+    
+    // ====================================================================================
+    // 💡 الفئة 17: حمولات الحقن المعتمد على الزمن والمنطق (Blind SQLi Payloads)
+    //    (Time-Based & Boolean-Based Payloads)
+    // ====================================================================================
+    
+    "SQLITE_TIME_BASED_CORE_FUNCTIONS": [
+      "sqlite_sleep(S)", // Why: Core function for delaying the response by 'S' seconds (if enabled).
+      "CAST(ABS(RANDOM()) AS INT) (Complex Math)", // Why: Technique to use CPU-intensive mathematical operations for delay when 'sleep' is unavailable.
+      "LIKE with large input/JOINs" // Why: Using pattern matching or multiple self-joins on large tables to force a measurable processing delay.
+    ],
+    
+    "SQLITE_BOOLEAN_BASED_CORE_TECHNIQUES": [
+      "CASE WHEN (condition) THEN 1 ELSE 0 END", // Why: The core conditional operator used to change the query result based on a True/False condition.
+      "EXISTS(SELECT 1 WHERE condition)" // Why: Checks for the existence of a record based on a condition, resulting in True/False output.
+    ]
+  }
+}
