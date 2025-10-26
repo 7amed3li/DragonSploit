@@ -1,41 +1,63 @@
 // launch-scan.ts
 
-// استيراد الـ Queue المركزي من موقعه الصحيح
+import { PrismaClient } from '@prisma/client';
 import { sqliQueue } from './src/worker/queues/sqli';
-import { randomUUID } from 'crypto';
+
+// إنشاء نسخة من Prisma Client للتفاعل مع قاعدة البيانات
+const prisma = new PrismaClient( );
 
 async function launch() {
   console.log('🚀 Launching a new AI-powered SQLi scan...');
 
+  // --- معلومات أساسية للاختبار ---
   const targetUrl = 'http://localhost:8080/rest/products/search';
+  
+  // ⚠️ استبدل هذه بالـ IDs الحقيقية من Prisma Studio
+  const ORGANIZATION_ID = 'cmh7pb7j60000egkkpiewdl4v'; // 👈 الصق معرّف المنظمة هنا
+  const TARGET_ID = 'cmh7pcum00000egicu33l5kji';       // 👈 الصق معرّف الهدف هنا
 
-  const jobData = {
-    scanId: randomUUID( ),
-    targetUrl: targetUrl,
-    organizationId: 'clg-test-org-123',
-    technologyFingerprint: {
+  try {
+    // --- الخطوة 1: إنشاء سجل الفحص في قاعدة البيانات ---
+    console.log('Creating scan record in the database...' );
+    const newScan = await prisma.scan.create({
+      data: {
+        status: 'QUEUED',
+        organizationId: ORGANIZATION_ID,
+        targetId: TARGET_ID,
+      },
+    });
+    console.log(`✅ Scan record created with ID: ${newScan.id}`);
+
+    // --- الخطوة 2: تجهيز بيانات المهمة باستخدام الـ ID الحقيقي ---
+    const jobData = {
+      scanId: newScan.id, // ⭐️ الأهم: استخدام الـ ID الحقيقي من قاعدة البيانات
+      targetUrl: targetUrl,
+      organizationId: newScan.organizationId,
+      technologyFingerprint: {
         server: 'Express',
         language: 'Node.js',
-        database: 'SQLite'
-    },
-  };
+        database: 'SQLite',
+      },
+    };
 
-  // استخدم الـ Queue المستورد مباشرة لإضافة المهمة
-  // اسم المهمة 'sqli-scan' يمكن أن يكون أي شيء، هو مجرد معرّف لنوع العمل
-  await sqliQueue.add('sqli-scan-job', jobData);
+    // --- الخطوة 3: إضافة المهمة إلى الطابور ---
+    await sqliQueue.add('sqli-scan-job', jobData);
 
-  console.log('✅ Scan job added to the queue successfully!');
-  console.log(`   - Queue Name: ${sqliQueue.name}`);
-  console.log(`   - Scan ID: ${jobData.scanId}`);
-  console.log(`   - Target: ${jobData.targetUrl}`);
-  console.log('--------------------------------------------------');
-  console.log('👀 Now, check the terminal where your DragonSploit API is running.');
+    console.log('✅ Scan job added to the queue successfully!');
+    console.log(`   - Queue Name: ${sqliQueue.name}`);
+    console.log(`   - Scan ID: ${jobData.scanId}`);
+    console.log(`   - Target: ${jobData.targetUrl}`);
+    console.log('--------------------------------------------------');
+    console.log('👀 Now, check the terminal where your workers are running.');
 
-  // أغلق الاتصال بالـ queue بعد إضافة المهمة
-  await sqliQueue.close();
+  } catch (error) {
+    console.error('❌ Failed to launch scan:', error);
+    process.exit(1);
+  } finally {
+    // التأكد من إغلاق الاتصالات
+    await prisma.$disconnect();
+    await sqliQueue.close();
+  }
 }
 
-launch().catch(error => {
-  console.error('❌ Failed to launch scan:', error);
-  process.exit(1);
-});
+launch();

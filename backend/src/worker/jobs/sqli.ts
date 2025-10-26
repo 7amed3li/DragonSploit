@@ -1,168 +1,140 @@
-// src/worker/jobs/sqli.ts (النسخة النهائية والمستقرة)
+// backend/src/worker/jobs/sqli.ts (النسخة النهائية والمصححة)
 
 import { Job } from 'bullmq';
-import axios from 'axios';
-import { PrismaClient, Severity, VulnerabilityType } from '@prisma/client'; 
-import { startSqliExploitationChat, getNextSqlPayload } from '../../services/ai';
-import { ALL_SQL_ERROR_SIGNATURES } from '../signatures';
+import { PrismaClient, Severity, VulnerabilityType } from '@prisma/client';
+import { startSqliExploitationChat, getNextSqlPayload } from '../../services/ai'; // تأكد من أن المسار صحيح
+import { ALL_SQL_ERROR_SIGNATURES } from '../sqli/signatures'; // تأكد من أن المسار صحيح
 import { URL } from 'url';
+import axios from 'axios';
 
-const prisma = new PrismaClient();
-const sqlErrorSignatures = ALL_SQL_ERROR_SIGNATURES;
-const MAX_ATTEMPTS_PER_PARAM = 7;
-const COMMON_FALLBACK_PARAMS = ['id', 'q', 'search', 'query', 'page', 'category', 'item', 'view'];
-const TIME_DELAY_THRESHOLD = 4000;
-
-
-/**
- * دالة مساعدة للتأخير لعدد معين من الميلي ثانية.
- */
+// --- دوال مساعدة (من الكود الذي أرسلته) ---
 const delay = (ms: number) => new Promise(res => setTimeout(res, ms));
 
-/**
- * دالة مساعدة لتنفيذ طلب HTTP وتسجيل الوقت.
- */
 async function executeRequest(urlToTest: string) {
     const startTime = Date.now();
     const response = await axios.get(urlToTest, {
-        timeout: 15000, 
+        timeout: 15000,
         headers: { 'User-Agent': 'DragonSploit/2.0' },
         validateStatus: () => true,
     });
     const responseTime = Date.now() - startTime;
-    const responseBody = (typeof response.data === 'string' || Buffer.isBuffer(response.data)) 
-        ? response.data.toString() 
+    const responseBody = (typeof response.data === 'string' || Buffer.isBuffer(response.data))
+        ? response.data.toString()
         : JSON.stringify(response.data);
-    
     return { response, responseTime, responseBody };
 }
 
-/**
- * 🆕 دالة مساعدة لتسجيل الثغرة مع معالجة أخطاء Prisma.
- * هذا يضمن عدم تعطل العامل (Worker) عند فشل قاعدة البيانات.
- */
-async function recordVulnerability(scanId: string, type: VulnerabilityType, severity: Severity, description: string, proof: string) {
-    
-    // 🛑 التعديل الحاسم: التحقق من وجود سجل الفحص قبل التسجيل لمنع Foreign Key Violation
-    const scanExists = await prisma.scan.findUnique({
-        where: { id: scanId },
-        select: { id: true },
-    });
-    
-    if (!scanExists) {
-        console.error(`❌ CRITICAL: Scan ID ${scanId} does not exist. Cannot record vulnerability due to Foreign Key Constraint violation.`);
-        return false;
-    }
-
+async function recordVulnerability(prisma: PrismaClient, scanId: string, type: VulnerabilityType, severity: Severity, description: string, proof: string) {
     try {
-        await prisma.vulnerability.create({
-            data: {
-                scanId: scanId, 
-                type: type, 
-                severity: severity,
-                description: description,
-                proof: proof,
-            }
-        });
+        await prisma.vulnerability.create({ data: { scanId, type, severity, description, proof } });
         console.log("✅ Vulnerability successfully recorded in the database.");
         return true;
     } catch (error: any) {
-        console.error(`❌ CRITICAL: Failed to record vulnerability [${type}] in DB. Error: ${error.message}`);
+        console.error(`❌ CRITICAL: Failed to record vulnerability. Error: ${error.message}`);
         return false;
     }
 }
 
+// --- الثوابت ---
+const MAX_ATTEMPTS_PER_PARAM = 10;
+const COMMON_FALLBACK_PARAMS = ['id', 'q', 'search', 'query', 'page', 'category', 'item', 'view'];
+const BASIC_SIGNATURE_PAYLOADS = ["'", "\"", "1' OR 1=1--"];
 
-export const processSqliJob = async (job: Job): Promise<void> => {
-    const { targetUrl, scanId, technologyFingerprint } = job.data;
-    console.log(`[SQLi Worker] Starting DYNAMIC DISCOVERY & EXPLOITATION for job ${job.id}`);
+
+/**
+ * دالة معالجة المهمة الرئيسية لـ SQLi
+ */
+export const processSqliJob = async (job: Job, prisma: PrismaClient): Promise<void> => {
+    const { targetUrl, scanId } = job.data;
+    console.log(`[SQLi Worker] Starting COMPREHENSIVE DISCOVERY for job ${job.id}`);
     
-    const url = new URL(targetUrl);
-    let paramsToTest = Array.from(url.searchParams.keys());
+    let foundVulnerability = false;
 
-    if (paramsToTest.length === 0) {
-        console.log('[SQLi Worker] No parameters found in URL, using common fallback list.');
-        paramsToTest = COMMON_FALLBACK_PARAMS;
-    }
-    console.log(`[SQLi Worker] Identified parameters to test: [${paramsToTest.join(', ')}]`);
-
-    // **الخطوة 1: حساب خط الأساس (BASELINE)**
-    console.log('[SQLi Worker] Calculating baseline metrics...');
-    const { response: baselineResponse, responseTime: baselineTime, responseBody: baselineBody } = await executeRequest(targetUrl);
-    
-    const baselineLength = baselineBody.length;
-    console.log(`[SQLi Worker] Baseline: Status ${baselineResponse.status}, Time ${baselineTime}ms, Length ${baselineLength}`);
-
-
-    for (const param of paramsToTest) {
+    for (const param of COMMON_FALLBACK_PARAMS) {
         console.log(`\n--- Testing Parameter: [${param}] ---`);
+
+        // الخطوة 1: الفحص السريع (Quick Win)
+        let quickWinFound = false;
+        for (const basicPayload of BASIC_SIGNATURE_PAYLOADS) {
+            try {
+                const testUrl = new URL(targetUrl);
+                testUrl.searchParams.set(param, basicPayload);
+                const { responseBody } = await executeRequest(testUrl.toString());
+                const foundSignature = ALL_SQL_ERROR_SIGNATURES.find(sig => responseBody.toLowerCase().includes(sig.toLowerCase()));
+                if (foundSignature) {
+                    console.log(`\n✅✅✅ Quick Win! VULNERABILITY CONFIRMED: Signature-Based SQLi ✅✅✅`);
+                    const proof = `Basic Payload: ${basicPayload}\nSignature: ${foundSignature}\nURL: ${testUrl}`;
+                    const description = `Signature-based SQL Injection confirmed in '${param}' with basic payload.`;
+                    await recordVulnerability(prisma, scanId, VulnerabilityType.SQL_INJECTION, Severity.HIGH, description, proof);
+                    quickWinFound = true;
+                    foundVulnerability = true;
+                    break;
+                }
+            } catch (e) { /* تجاهل الأخطاء في هذه المرحلة السريعة */ }
+        }
+        if (quickWinFound) continue;
+
+        // الخطوة 2: التصعيد إلى الذكاء الاصطناعي (Deep Scan)
+        console.log(`[Hybrid] Escalating to Conversational AI for deep scan on '${param}'...`);
         
-        const technologyContext = JSON.stringify(technologyFingerprint) || 'Unknown Stack (Defaulting to basic SQL payloads)';
-        const chat = startSqliExploitationChat(technologyContext);
-
+        // ✅✅✅ الإصلاح الحاسم ✅✅✅
+        // 1. استدعاء الدالة بدون أي مدخلات
+        const chat = startSqliExploitationChat();
+        
+        // 2. رسالة البدء الآمنة والموحدة
+        let feedback = `Begin analysis on parameter '${param}'. Acknowledge your role and provide the first payload as instructed by your directives (Phase 1).`;
+        let aiFinished = false;
         let attempts = 0;
-        let feedback = "Start. Give me the first payload.";
 
-        while (attempts < MAX_ATTEMPTS_PER_PARAM) {
+        while (attempts < MAX_ATTEMPTS_PER_PARAM && !aiFinished) {
             attempts++;
-            console.log(`[Attempt #${attempts} on param '${param}']`);
+            console.log(`\n[Deep Scan Attempt #${attempts} on '${param}']`);
 
             if (attempts > 1) {
-                console.log(`[Throttling] Waiting for 6 seconds to respect API rate limits...`);
-                await delay(6000); 
+                console.log(`[Throttling] Waiting for 6 seconds...`);
+                await delay(6000);
             }
 
-            const { payload, finished } = await getNextSqlPayload(chat, feedback);
+            const { payload, reasoning, finished } = await getNextSqlPayload(chat, feedback);
+            aiFinished = finished;
 
-            if (finished || !payload) {
+            console.log(`[AI Reasoning] ${reasoning}`);
+            if (aiFinished || !payload) {
                 console.log(`[AI decided to end attempt on param '${param}']`);
                 break;
             }
-
             console.log(`[AI suggested payload: "${payload}"]`);
 
             try {
                 const testUrl = new URL(targetUrl);
                 testUrl.searchParams.set(param, payload);
-                const urlToTest = testUrl.toString();
-
-                const { response, responseTime, responseBody } = await executeRequest(urlToTest);
-                const responseBodyLower = responseBody.toLowerCase();
-
-                // **المنطق الذهبي 1: التحقق من الثغرات الزمنية العمياء (Time-Based)**
-                if (responseTime > baselineTime + TIME_DELAY_THRESHOLD) {
-                    console.log(`\n🔥🔥🔥 CRITICAL VULNERABILITY CONFIRMED: Time-Based SQLi 🔥🔥🔥`);
-                    
-                    const proof = `Payload: ${payload}\nURL: ${urlToTest}\nResponse Delay: ${responseTime}ms (Baseline: ${baselineTime}ms)`;
-                    const description = `Conversational AI confirmed Time-Based Blind SQL Injection in '${param}'. Server delayed response for ${responseTime}ms.`;
-
-                    await recordVulnerability(scanId, VulnerabilityType.SQL_INJECTION, Severity.CRITICAL, description, proof);
-                    
-                    return; 
-                }
+                const { response, responseBody, responseTime } = await executeRequest(testUrl.toString());
                 
-                // **المنطق الذهبي 2: التحقق من رسائل الخطأ (Error-Based)**
-                for (const signature of sqlErrorSignatures) {
-                    if (response.status === 500 || responseBodyLower.includes(signature.toLowerCase())) {
-                        console.log(`\n✅✅✅ VULNERABILITY CONFIRMED: Error-Based SQLi ✅✅✅`);
+                const errorSignature = ALL_SQL_ERROR_SIGNATURES.find(sig => responseBody.toLowerCase().includes(sig.toLowerCase()));
 
-                        const proof = `Payload: ${payload}\nError Signature: "${signature || 'Status 500 error'}"\nURL: ${urlToTest}`;
-                        const description = `Error-based SQL Injection confirmed in the '${param}' parameter. Signature found in Status ${response.status} response.`;
-                        
-                        await recordVulnerability(scanId, VulnerabilityType.SQL_INJECTION, Severity.HIGH, description, proof);
-                        
-                        return;
-                    }
+                // 3. توليد التغذية الراجعة بالتنسيق الذي يتوقعه "برومبت السيادة"
+                feedback = `Target responded to '${payload}' with: Status=${response.status}, Time=${responseTime.toFixed(0)}ms, Length=${responseBody.length}, Error='${errorSignature || 'None'}'`;
+
+                // الكشف عن النجاح
+                if (errorSignature || responseBody.match(/([a-zA-Z0-9._-]+@[a-zA-Z0-9._-]+\.[a-zA-Z0-9_-]+)|(root@localhost)|(@@version)/i)) {
+                    console.log(`[AI-driven Scan] ✅ VULNERABILITY CONFIRMED!`);
+                    const proof = `Payload: ${payload}\nAI Reasoning: ${reasoning}\nResponse Snippet: ${responseBody.substring(0, 200)}...`;
+                    const description = `AI-driven SQLi in '${param}'. Vulnerability confirmed through conversational analysis.`;
+                    await recordVulnerability(prisma, scanId, VulnerabilityType.SQL_INJECTION, Severity.CRITICAL, description, proof);
+                    foundVulnerability = true;
+                    break;
                 }
-                
-                // إرسال التغذية الراجعة الغنية إلى AI للمحاولة التالية
-                feedback = `Input '${payload}' gave: Status ${response.status}, Time ${responseTime}ms, Length ${responseBody.length}. (Baseline: Status ${baselineResponse.status}, Time ${baselineTime}ms, Length ${baselineLength}). Analyze and suggest next payload or conclude.`;
-
             } catch (error: any) {
-                feedback = `Input string '${payload}' for parameter '${param}' resulted in a network error: ${error.message}. Suggest an alternative payload or decide to stop.`;
+                feedback = `Execution of '${payload}' failed with client-side error: ${error.message}. Suggest an alternative.`;
             }
         }
     }
 
-    console.log(`\n[SQLi Worker] Finished dynamic scan for job ${job.id}. No vulnerabilities found.`);
+    // تحديث حالة الفحص في النهاية
+    await prisma.scan.update({
+        where: { id: scanId },
+        data: { status: 'COMPLETED', completedAt: new Date() },
+    });
+    console.log(`[SQLi Worker] Finished all attack phases for job ${job.id}.`);
 };
+    
