@@ -7,6 +7,8 @@ import https from 'https';
 // ⚙️ CONFIGURATION & CONSTANTS
 // ============================================================================
 
+// Common utilities for SQL Injection vectors
+
 export const COMMON_FALLBACK_PARAMS = ['id', 'q', 'search', 'query', 'page', 'category', 'item', 'view'];
 export const BASIC_ERROR_PAYLOADS = ["'", '"', "1'"];
 export const TIME_DELAY_THRESHOLD = 4000;
@@ -16,20 +18,18 @@ const REQUEST_TIMEOUT = 15000;
 const USER_AGENT = 'DragonSploit/2.0 (Security Scanner)';
 
 // 🚀 PERFORMANCE BOOST: Shared Keep-Alive Agents (Global Pool)
-// نقوم بتصدير هذه الوكلاء لكي تستخدمها جميع ملفات الهجوم (Vectors)
-// هذا يضمن استخدام مخزن اتصالات واحد (Connection Pool) للنظام بأكمله
-export const httpAgent = new http.Agent({ 
-    keepAlive: true, 
-    maxSockets: 100, 
+export const httpAgent = new http.Agent({
+    keepAlive: true,
+    maxSockets: 100,
     maxFreeSockets: 10,
-    timeout: 60000 
+    timeout: 60000
 });
 
-export const httpsAgent = new https.Agent({ 
-    keepAlive: true, 
-    maxSockets: 100, 
-    maxFreeSockets: 10, 
-    rejectUnauthorized: false, // تجاهل أخطاء SSL للفحص الأمني
+export const httpsAgent = new https.Agent({
+    keepAlive: true,
+    maxSockets: 100,
+    maxFreeSockets: 10,
+    rejectUnauthorized: false, // Ignore SSL errors for security scanning
     timeout: 60000
 });
 
@@ -51,26 +51,37 @@ export interface RequestResult {
 /**
  * Executes an HTTP request with production-grade resilience.
  * Uses the global shared agents for maximum efficiency.
+ * Supports GET, POST, PUT, etc. via config.
  */
 export async function executeRequest(urlToTest: string, config: AxiosRequestConfig = {}): Promise<RequestResult> {
     const startTime = Date.now();
-    
-    // دمج الإعدادات مع استخدام الوكلاء العالميين
+
+    // Auto-detect content type if data is present but header is missing
+    const headers: any = { 'User-Agent': USER_AGENT, ...config.headers };
+    if (config.data && !headers['Content-Type']) {
+        if (typeof config.data === 'object') {
+            headers['Content-Type'] = 'application/json';
+        } else if (typeof config.data === 'string' && config.data.includes('=')) {
+            headers['Content-Type'] = 'application/x-www-form-urlencoded';
+        }
+    }
+
+    // Merge settings
     const requestConfig: AxiosRequestConfig = {
         url: urlToTest,
-        method: 'GET',
+        method: 'GET', // Default
         timeout: REQUEST_TIMEOUT,
-        headers: { 'User-Agent': USER_AGENT },
-        validateStatus: () => true, 
-        httpAgent: httpAgent,   // ✅ استخدام الوكيل المشترك
-        httpsAgent: httpsAgent, // ✅ استخدام الوكيل المشترك
-        ...config
+        validateStatus: () => true,
+        httpAgent: httpAgent,
+        httpsAgent: httpsAgent,
+        ...config,
+        headers // Use enhanced headers
     };
 
     try {
         const response = await axios(requestConfig);
         const responseTime = Date.now() - startTime;
-        
+
         // Safe body extraction
         let responseBody = '';
         if (response.data) {
@@ -99,36 +110,66 @@ export async function executeRequest(urlToTest: string, config: AxiosRequestConf
             responseTime,
             responseBody: '',
             responseLength: 0,
-            status: 0, 
+            status: 0,
             error: error.message
         };
     }
 }
 
 /**
+ * Detects if a response indicates a WAF block.
+ */
+export function detectWaf(responseBody: string, statusCode: number): boolean {
+    const wafSignatures = [
+        'blocked by waf',
+        'security violation',
+        'firewall',
+        'mod_security',
+        'sucuri',
+        'cloudflare',
+        'imperva',
+        'incapsula',
+        'access denied',
+        'forbidden',
+        'request rejected'
+    ];
+
+    // 403 Forbidden and 406 Not Acceptable are strong indicators
+    if (statusCode === 403 || statusCode === 406) {
+        // But verify it's not just a standard auth error
+        if (!responseBody.toLowerCase().includes('login') && !responseBody.toLowerCase().includes('password')) {
+            return true;
+        }
+    }
+
+    const lowerBody = responseBody.toLowerCase();
+    return wafSignatures.some(sig => lowerBody.includes(sig));
+}
+
+/**
  * Records a confirmed vulnerability to the database with structured logging.
  */
 export async function recordVulnerability(
-    prisma: PrismaClient, 
-    scanId: string, 
-    type: VulnerabilityType, 
-    severity: Severity, 
-    description: string, 
+    prisma: PrismaClient,
+    scanId: string,
+    type: VulnerabilityType,
+    severity: Severity,
+    description: string,
     proof: string
 ): Promise<void> {
     try {
         const safeProof = proof.length > 5000 ? proof.substring(0, 5000) + '...[TRUNCATED]' : proof;
 
         await prisma.vulnerability.create({
-            data: { 
-                scanId, 
-                type, 
-                severity, 
-                description, 
-                proof: safeProof 
+            data: {
+                scanId,
+                type,
+                severity,
+                description,
+                proof: safeProof
             },
         });
-        
+
         // JSON Logging for observability (ELK/Splunk ready)
         console.log(JSON.stringify({
             level: 'INFO',

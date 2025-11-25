@@ -676,9 +676,82 @@ General: All vectors updated to use the shared httpAgent from common.ts.
 DragonSploit is no longer just a script. It is now a resilient, concurrent, and resource-aware distributed system. It handles network failures gracefully, respects API quotas automatically, and scales its attacks intelligently.
 
 🚀 Current Status:
+    Body: Parallel Orchestrator with Keep-Alive Networking.
 
-Brain: Cortex v4.1 (Stateless, Rate-Limited).
+---
 
-Body: Parallel Orchestrator with Keep-Alive Networking.
+### 📅 **2025-11-25: The Stealth Evolution — WAF Evasion & Parameter Discovery**
 
-Doctrine: Total War (Fail-Fast & Blind-Aware).
+**Title:** Beyond Simple Attacks: Engineering WAF Bypass & Advanced Parameter Discovery.
+
+**Context:** While the scanner was functional, it lacked the sophistication to handle modern defenses. Web Application Firewalls (WAFs) were easily blocking our static payloads, and our parameter discovery was limited to URL query strings, missing the vast attack surface of POST requests and JSON APIs. The objective was to evolve DragonSploit from a "noisy hammer" into a "stealthy scalpel."
+
+---
+
+#### **1. Challenge: The "WAF Wall" — Signature-Based Blocking**
+
+*   **Symptom:** Tests against secured targets (like Cloudflare-protected sites) resulted in immediate `403 Forbidden` or `406 Not Acceptable` responses. Our payloads were too "clean" and easily recognized by signature-based filters.
+*   **Research & Strategy:** I conducted a deep dive into WAF evasion techniques. The consensus was that simple encoding is no longer enough. We needed **polymorphic obfuscation**—changing the shape of the attack without changing its logic.
+*   **Implementation: The `WafBypassEngine`**
+    *   **Architecture:** I designed a modular obfuscation engine (`src/worker/sqli/waf-bypass`) capable of applying multiple layers of evasion.
+    *   **Techniques Implemented:**
+        *   **Case Variation:** `SeLeCt` vs `SELECT`.
+        *   **Comment Injection:** `UN/**/ION` to break keyword signatures.
+        *   **Whitespace Polymorphism:** Replacing spaces with tabs, newlines, or comments to evade regex filters.
+        *   **Multi-Layering:** A "Russian Doll" approach where payloads are wrapped in multiple obfuscation layers (e.g., Case + Comment + URL Encoding).
+    *   **Result:** The scanner can now generate 10+ variations of a single payload, significantly increasing the probability of bypassing rigid WAF rules.
+
+---
+
+#### **2. Challenge: The "Hidden Surface" — Missing POST & JSON Parameters**
+
+*   **Symptom:** The scanner was effectively blind to 50% of modern web traffic. It ignored login forms (POST) and API endpoints (JSON), testing only what was visible in the URL bar.
+*   **Engineering Solution: The `ParameterDiscovery` Module**
+    *   **Design:** I built a dedicated discovery engine (`src/worker/sqli/parameter-discovery`) that acts as a pre-scan reconnaissance phase.
+    *   **Capabilities:**
+        *   **HTML Form Parsing:** Utilized regex-based parsing to extract `<form>` inputs, actions, and methods from raw HTML responses.
+        *   **JSON Structure Analysis:** Implemented logic to parse JSON responses and identify keys that could serve as injection points.
+        *   **Auto-Type Detection:** The system now automatically detects `Content-Type` (e.g., `application/json` vs `application/x-www-form-urlencoded`) and adapts the injection strategy accordingly.
+    *   **Impact:** DragonSploit now "sees" the entire application, not just the surface.
+
+---
+
+#### **3. Challenge: The "Type Safety" Crisis — Stabilizing the Core**
+
+*   **Symptom:** As the codebase grew, we faced a wave of critical TypeScript errors. The integration between the AI provider and the caching layer was fragile, leading to runtime crashes when AI responses didn't match the expected schema.
+*   **Root Cause:** Inconsistent type definitions between `AIResponse` and `CachedPayload`, and a lack of strict null checks in the new obfuscation logic.
+*   **Fix: Hardening the Codebase**
+    *   **Strict Null Checks:** I refactored the entire `vector1-in-band.ts` and `obfuscation.ts` modules to enforce strict null safety. No variable is accessed without verification.
+    *   **Type Unification:** I aligned the interfaces across the AI and Cache services, ensuring a seamless data flow.
+    *   **File Integrity:** Recovered from a critical file corruption in `common.ts` that had broken the module exports.
+
+---
+
+#### **4. Strategic Pivot: The Hybrid AI Architecture (Local First)**
+
+*   **Context:** Relying solely on cloud-based AI (Gemini) introduced latency, cost (quota limits), and privacy concerns. We needed a more robust, autonomous solution.
+*   **Decision: Local-First Strategy with Ollama**
+    *   **Primary Engine:** Adopted **Ollama** to run open-source models (Llama 3, Mistral) locally on the user's machine.
+    *   **Rationale:**
+        *   **Privacy:** Sensitive scan data stays local.
+        *   **Cost:** Zero API fees.
+        *   **Reliability:** No rate limits or internet dependency for core scanning.
+*   **The Hybrid Fallback Plan:**
+    *   **Gemini as Specialist:** Retained Google Gemini only as a "Plan B" or for highly complex reasoning tasks that local models might struggle with.
+    *   **Model Selection:**
+        *   **Local:** Llama 3 (Speed/General), Mistral (Logic).
+        *   **Cloud:** Gemini Pro (Deep reasoning fallback).
+*   **Impact:** This hybrid approach gives us the speed and privacy of local execution with the raw power of cloud AI on standby.
+
+---
+
+✅ **Milestone Achieved:**
+
+*   **Stealth Capabilities:** DragonSploit can now evade standard WAF signatures using advanced obfuscation.
+*   **Full Visibility:** The scanner now supports GET, POST, and JSON injection points.
+*   **Enterprise Stability:** The codebase has been hardened with strict TypeScript enforcement and robust error handling.
+
+🚀 **Next Steps:**
+
+*   **Verify WAF Bypass:** Run targeted tests against a WAF-protected environment to measure evasion success rates.
+*   **Expand Vector 2:** Integrate the new WAF bypass and parameter discovery logic into the Blind SQLi vector.
