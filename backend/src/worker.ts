@@ -22,10 +22,15 @@ import { processLaravelJob } from './worker/jobs/laravel';
 import { processDrupalJob } from './worker/jobs/drupal';
 import { processNginxJob } from './worker/jobs/nginx';
 import { processApacheJob } from './worker/jobs/apache';
-import { processSqliJob } from './worker/jobs/sqli'; 
+import { processSqliJob } from './worker/jobs/sqli';
 import { processXssJob } from './worker/jobs/xss';
 
 console.log('🚀 DragonSploit Workers Service has started...');
+console.log(`ℹ️  AI Config Loaded:`);
+console.log(`   - Provider: ${process.env.AI_PROVIDER_ORDER || 'default'}`);
+console.log(`   - Timeout: ${process.env.OLLAMA_TIMEOUT || '30000'}ms`);
+console.log(`   - Fallback Model: ${process.env.OLLAMA_FALLBACK_MODEL || 'None'}`);
+console.log(`   - Fallback Enabled: ${process.env.ENABLE_AI_FALLBACK || 'false'}`);
 
 const prisma = new PrismaClient();
 
@@ -33,14 +38,14 @@ type AppPrismaClient = PrismaClient;
 type ProcessorFunction = (job: Job, prisma: AppPrismaClient) => Promise<void>;
 
 const workers: { name: string; processor: ProcessorFunction; concurrency: number }[] = [
-    { name: SCAN_QUEUE_NAME, processor: processScanJob as ProcessorFunction, concurrency: 5 },
-    { name: WORDPRESS_QUEUE_NAME, processor: processWordPressJob as ProcessorFunction, concurrency: 3 },
-    { name: LARAVEL_QUEUE_NAME, processor: processLaravelJob as ProcessorFunction, concurrency: 3 },
-    { name: DRUPAL_QUEUE_NAME, processor: processDrupalJob as ProcessorFunction, concurrency: 3 },
-    { name: NGINX_QUEUE_NAME, processor: processNginxJob as ProcessorFunction, concurrency: 2 },
-    { name: APACHE_QUEUE_NAME, processor: processApacheJob as ProcessorFunction, concurrency: 2 },
-    { name: SQLI_QUEUE_NAME, processor: processSqliJob as ProcessorFunction, concurrency: 4 },
-    { name: XSS_QUEUE_NAME, processor: processXssJob as ProcessorFunction, concurrency: 4 },
+    { name: SCAN_QUEUE_NAME, processor: processScanJob as ProcessorFunction, concurrency: 1 },
+    { name: WORDPRESS_QUEUE_NAME, processor: processWordPressJob as ProcessorFunction, concurrency: 1 },
+    { name: LARAVEL_QUEUE_NAME, processor: processLaravelJob as ProcessorFunction, concurrency: 1 },
+    { name: DRUPAL_QUEUE_NAME, processor: processDrupalJob as ProcessorFunction, concurrency: 1 },
+    { name: NGINX_QUEUE_NAME, processor: processNginxJob as ProcessorFunction, concurrency: 1 },
+    { name: APACHE_QUEUE_NAME, processor: processApacheJob as ProcessorFunction, concurrency: 1 },
+    { name: SQLI_QUEUE_NAME, processor: processSqliJob as ProcessorFunction, concurrency: 1 },
+    { name: XSS_QUEUE_NAME, processor: processXssJob as ProcessorFunction, concurrency: 1 },
 ];
 
 const activeWorkers: Worker[] = [];
@@ -70,11 +75,20 @@ workers.forEach(workerInfo => {
 console.log(`✅ All ${activeWorkers.length} workers are running.`);
 
 const gracefulShutdown = async () => {
-    console.log('...Initiating graceful shutdown for all workers...');
-    await Promise.all(activeWorkers.map(worker => worker.close()));
+    console.log('⚠️ Shutdown signal received. Aborting active jobs...');
+
+    // Force close all workers (don't wait for active jobs to finish)
+    await Promise.all(activeWorkers.map(worker => worker.close(true)));
+
     await prisma.$disconnect();
-    await redisConnection.quit();
-    console.log('All workers and connections closed. Exiting.');
+
+    try {
+        await redisConnection.quit();
+    } catch (err) {
+        console.warn('Redis already disconnected');
+    }
+
+    console.log('✅ All workers killed. Exiting.');
     process.exit(0);
 };
 

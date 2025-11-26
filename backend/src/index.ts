@@ -22,10 +22,10 @@ import scanRouter from './routes/scans';
 // --- Import Swagger and Worker Loader ---
 import { setupSwagger } from './swagger';
 // المسار الصحيح لملف تحميل العمال
-import { startWorkers } from './worker/worker-loader'; 
+import { startWorkers } from './worker/worker-loader';
 
 // --- Initialization ---
-export const app: Express = express( );
+export const app: Express = express();
 const prisma = new PrismaClient();
 
 // --- Main Application Function ---
@@ -55,13 +55,13 @@ async function main() {
   // --- Global Error Handler ---
   app.use((err: Error, req: Request, res: Response, next: NextFunction) => {
     if (!(err instanceof AppError)) {
-        console.log('!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!');
-        console.log('!!!!!!!!!! AN ERROR WAS CAUGHT !!!!!!!!!!!!!');
-        console.log('!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!');
-        console.error(err);
-        console.log('!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!');
-        console.log('!!!!!!!!!! END OF ERROR !!!!!!!!!!!!!!!!!!');
-        console.log('!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!');
+      console.log('!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!');
+      console.log('!!!!!!!!!! AN ERROR WAS CAUGHT !!!!!!!!!!!!!');
+      console.log('!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!');
+      console.error(err);
+      console.log('!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!');
+      console.log('!!!!!!!!!! END OF ERROR !!!!!!!!!!!!!!!!!!');
+      console.log('!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!');
     }
     if (err instanceof AppError) {
       return res.status(err.statusCode).json({ message: err.message });
@@ -72,11 +72,11 @@ async function main() {
   // --- Start Server and Workers ---
   const PORT = process.env.PORT || 3001;
   app.listen(PORT, () => {
-    console.log(`🚀 API Server is running on http://localhost:${PORT}` );
-    
+    console.log(`🚀 API Server is running on http://localhost:${PORT}`);
+
     // --- بداية التعديل الرئيسي ---
     // بعد أن يعمل الخادم بنجاح، قم ببدء تشغيل العمال
-    startWorkers();
+    // startWorkers(); // ❌ Disabled to prevent conflict with 'npm run dev:worker'
     // --- نهاية التعديل الرئيسي ---
   });
 

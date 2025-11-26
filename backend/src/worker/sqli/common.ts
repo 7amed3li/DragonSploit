@@ -105,13 +105,16 @@ export async function executeRequest(urlToTest: string, config: AxiosRequestConf
     } catch (error: any) {
         // 🛡️ NETWORK ERROR HANDLING
         const responseTime = Date.now() - startTime;
+        const errorMsg = error.code ? `${error.code} (${error.message})` : error.message;
+        console.error(`[Network Error] ${urlToTest} -> ${errorMsg}`);
+
         return {
             response: null,
             responseTime,
             responseBody: '',
             responseLength: 0,
             status: 0,
-            error: error.message
+            error: errorMsg
         };
     }
 }

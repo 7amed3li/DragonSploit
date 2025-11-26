@@ -9,12 +9,9 @@ if (!process.env.GEMINI_API_KEY) {
 }
 
 const genAI = new GoogleGenerativeAI(process.env.GEMINI_API_KEY);
-const MODEL_NAME = "gemini-2.5-flash"; 
+const MODEL_NAME = "gemini-2.5-flash";
 
-console.log(`\n🧠 ==================================================`);
-console.log(`🧠 DragonSploit Cortex v4.1 (Rate-Limited Edition)`);
-console.log(`🧠 Model: ${MODEL_NAME} | Protection: Global Traffic Cop`);
-console.log(`🧠 ==================================================\n`);
+// Banner removed to prevent confusion with Ollama
 
 const safetySettings = [
     { category: HarmCategory.HARM_CATEGORY_HARASSMENT, threshold: HarmBlockThreshold.BLOCK_NONE },
@@ -44,25 +41,18 @@ const SYSTEM_INSTRUCTION = `
 // 🚦 GLOBAL RATE LIMITER (The Traffic Cop)
 // ============================================================================
 
-// متغير لتتبع وقت آخر طلب تم إرساله على مستوى التطبيق بالكامل
 let lastRequestTimestamp = 0;
-// الحد الأدنى للفاصل الزمني (5000 مللي ثانية = 5 ثوانٍ)
-// هذا يعني أقصى سرعة هي 12 طلب في الدقيقة، وهو آمن للخطة المجانية (التي تسمح بـ 15).
-const MIN_REQUEST_INTERVAL = 5000; 
+const MIN_REQUEST_INTERVAL = 5000;
 
-/**
- * دالة تضمن عدم إرسال أي طلب قبل مرور الوقت المسموح.
- */
 async function enforceRateLimit() {
     const now = Date.now();
     const timeSinceLastRequest = now - lastRequestTimestamp;
 
     if (timeSinceLastRequest < MIN_REQUEST_INTERVAL) {
         const waitTime = MIN_REQUEST_INTERVAL - timeSinceLastRequest;
-        // لا داعي لطباعة رسالة انتظار لكل مرة لتجنب إزعاج اللوج، لكن الانتظار يحدث فعلياً
         await new Promise(resolve => setTimeout(resolve, waitTime));
     }
-    
+
     lastRequestTimestamp = Date.now();
 }
 
@@ -78,29 +68,27 @@ export async function getNextSqlPayload(chat: ChatSession, feedback: string): Pr
     const logFeedback = feedback.length > 120 ? feedback.substring(0, 120) + "..." : feedback;
     console.log(`[Cortex] 📥 Analyzing: "${logFeedback}"`);
 
-    const MAX_RETRIES = 5; // زيادة المحاولات قليلاً
+    const MAX_RETRIES = 5;
     let attempt = 0;
 
     while (attempt < MAX_RETRIES) {
         try {
-            // 🛑 Stop! Traffic Cop Check 🛑
-            // لن يمر هذا السطر إلا بعد التأكد من مرور 5 ثوانٍ منذ آخر طلب
             await enforceRateLimit();
 
             const dynamicTemperature = 0.1 + (attempt * 0.15);
-            
-            const model = genAI.getGenerativeModel({ 
+
+            const model = genAI.getGenerativeModel({
                 model: MODEL_NAME,
                 safetySettings,
-                systemInstruction: { role: "system", parts: [{ text: SYSTEM_INSTRUCTION }] } 
+                systemInstruction: { role: "system", parts: [{ text: SYSTEM_INSTRUCTION }] }
             });
 
             const result = await model.generateContent({
                 contents: [{ role: "user", parts: [{ text: `STATUS REPORT:\n${feedback}\n\nTASK: Generate the single most effective NEXT payload JSON.` }] }],
-                generationConfig: { 
+                generationConfig: {
                     responseMimeType: "application/json",
                     maxOutputTokens: 512,
-                    temperature: dynamicTemperature 
+                    temperature: dynamicTemperature
                 }
             });
 
@@ -122,11 +110,10 @@ export async function getNextSqlPayload(chat: ChatSession, feedback: string): Pr
         } catch (error: any) {
             attempt++;
             const msg = error.message || '';
-            
+
             if (msg.includes('429') || msg.includes('503')) {
-                // إذا حدث خطأ 429 رغم الـ Rate Limiter، ننتظر وقتاً أطول بكثير
                 const backoff = Math.pow(2, attempt) * 2000 + Math.random() * 1000;
-                console.warn(`[Cortex] ⏳ API Limit Hit. Cooling down for ${(backoff/1000).toFixed(1)}s...`);
+                console.warn(`[Cortex] ⏳ API Limit Hit. Cooling down for ${(backoff / 1000).toFixed(1)}s...`);
                 await new Promise(resolve => setTimeout(resolve, backoff));
             } else if (msg.includes('JSON')) {
                 console.warn(`[Cortex] ⚠️ JSON Error. Retrying...`);

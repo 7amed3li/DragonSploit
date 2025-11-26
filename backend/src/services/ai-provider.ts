@@ -11,7 +11,7 @@ import { ChatSession } from '@google/generative-ai';
 // CONFIGURATION
 // ============================================================================
 
-const AI_PROVIDER_ORDER = (process.env.AI_PROVIDER_ORDER || 'ollama,gemini').split(',');
+const AI_PROVIDER_ORDER = ['ollama']; // FORCE OLLAMA ONLY
 const ENABLE_FALLBACK = process.env.ENABLE_AI_FALLBACK !== 'false';
 
 console.log(`\n🤖 ==================================================`);
@@ -29,12 +29,14 @@ export interface AIContext {
     parameter?: string;
     targetUrl?: string;
     attemptNumber?: number;
+    fingerprint?: any;
     chatSession?: ChatSession; // For Gemini continuity
 }
 
 export interface AIResponse {
     payload: string | null;
     reasoning: string;
+    mode?: string;
     finished: boolean;
     provider: 'ollama' | 'groq' | 'gemini' | 'fallback';
 }
