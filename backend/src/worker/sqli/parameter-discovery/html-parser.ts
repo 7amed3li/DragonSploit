@@ -55,7 +55,7 @@ export function extractForms(html: string, baseUrl: string): DiscoveredForm[] {
 
         // Extract method
         const methodMatch = attributes.match(/method=["']([^"']*)["']/i);
-        const method = methodMatch ? methodMatch[1].toUpperCase() : 'GET';
+        const method = methodMatch?.[1]?.toUpperCase() ?? 'GET';
 
         // Extract inputs
         const inputs: FormInput[] = [];
