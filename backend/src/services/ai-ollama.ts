@@ -12,7 +12,7 @@ import axios from 'axios';
 const OLLAMA_BASE_URL = process.env.OLLAMA_BASE_URL || 'http://localhost:11434';
 const PRIMARY_MODEL = process.env.OLLAMA_PRIMARY_MODEL || 'llama3.1:8b-instruct-q4_K_M';
 const FALLBACK_MODEL = process.env.OLLAMA_FALLBACK_MODEL || 'qwen2.5-coder:7b';
-const TIMEOUT_MS = parseInt(process.env.OLLAMA_TIMEOUT || '30000');
+const TIMEOUT_MS = parseInt(process.env.OLLAMA_TIMEOUT || '120000');
 
 console.log(`\n🦙 ==================================================`);
 console.log(`🦙 DragonSploit Ollama Engine v1.0`);
