@@ -31,6 +31,13 @@ export interface AIContext {
     attemptNumber?: number;
     fingerprint?: any;
     chatSession?: ChatSession; // For Gemini continuity
+    previousPayloads?: string[];
+    avoidModes?: string[];
+    modeStats?: Record<string, {
+        successCount: number;
+        failureCount: number;
+        avgTimeMs: number;
+    }>;
 }
 
 export interface AIResponse {

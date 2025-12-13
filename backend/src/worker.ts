@@ -1,11 +1,11 @@
-// src/worker.ts (مع إصلاح مسار الاستيراد النهائي)
+// src/worker.ts (corrected imports and worker config)
 
 import 'dotenv/config';
 import { Worker, Job } from 'bullmq';
 import { PrismaClient } from '@prisma/client';
 import { redisConnection } from './worker/queues/connection';
 
-// استيراد أسماء الطوابير
+// Queue Names
 import { SCAN_QUEUE_NAME } from './worker/queues/scan';
 import { WORDPRESS_QUEUE_NAME } from './worker/queues/wordpress';
 import { LARAVEL_QUEUE_NAME } from './worker/queues/laravel';
@@ -13,9 +13,10 @@ import { DRUPAL_QUEUE_NAME } from './worker/queues/drupal';
 import { NGINX_QUEUE_NAME } from './worker/queues/nginx';
 import { APACHE_QUEUE_NAME } from './worker/queues/apache';
 import { SQLI_QUEUE_NAME } from './worker/queues/sqli';
+import { SQLI_PARAM_QUEUE_NAME } from './worker/queues/sqli-param';
 import { XSS_QUEUE_NAME } from './worker/queues/xss';
 
-// استيراد معالجات المهام
+// Job Processors
 import { processScanJob } from './worker/jobs/scan.processor';
 import { processWordPressJob } from './worker/jobs/wordpress';
 import { processLaravelJob } from './worker/jobs/laravel';
@@ -23,6 +24,7 @@ import { processDrupalJob } from './worker/jobs/drupal';
 import { processNginxJob } from './worker/jobs/nginx';
 import { processApacheJob } from './worker/jobs/apache';
 import { processSqliJob } from './worker/jobs/sqli';
+import { processSqliParamJob } from './worker/jobs/sqli-param';
 import { processXssJob } from './worker/jobs/xss';
 
 console.log('🚀 DragonSploit Workers Service has started...');
@@ -45,6 +47,7 @@ const workers: { name: string; processor: ProcessorFunction; concurrency: number
     { name: NGINX_QUEUE_NAME, processor: processNginxJob as ProcessorFunction, concurrency: 1 },
     { name: APACHE_QUEUE_NAME, processor: processApacheJob as ProcessorFunction, concurrency: 1 },
     { name: SQLI_QUEUE_NAME, processor: processSqliJob as ProcessorFunction, concurrency: 1 },
+    { name: SQLI_PARAM_QUEUE_NAME, processor: processSqliParamJob as ProcessorFunction, concurrency: 2 },
     { name: XSS_QUEUE_NAME, processor: processXssJob as ProcessorFunction, concurrency: 1 },
 ];
 

@@ -211,40 +211,66 @@ export async function getNextSqlPayloadOllama(
         parameter?: string;
         attemptNumber?: number;
         fingerprint?: any;
+        previousPayloads?: string[];
+        avoidModes?: string[];
+        modeStats?: Record<string, {
+            successCount: number;
+            failureCount: number;
+            avgTimeMs: number;
+        }>;
     } = {}
 ): Promise<OllamaResponse> {
 
     const logFeedback = feedback.length > 120 ? feedback.substring(0, 120) + '...' : feedback;
     console.log(`[Ollama] 🦙 Processing: "${logFeedback}"`);
 
-    const prompt = buildPrompt(feedback, context);
+    // DEDUPLICATION RETRY LOOP
+    const MAX_RETRIES = 3;
+    let currentAttempt = 0;
+    let currentFeedback = feedback;
 
-    try {
-        const response = await callOllama(prompt, currentModel);
-        return response;
+    while (currentAttempt < MAX_RETRIES) {
+        const prompt = buildPrompt(currentFeedback, context);
 
-    } catch (error: any) {
+        try {
+            const response = await callOllama(prompt, currentModel, context);
 
-        // If primary model fails, try fallback
-        if (currentModel === PRIMARY_MODEL) {
-            console.warn(`[Ollama] Primary model failed, trying fallback...`);
-            console.error(`[Ollama] Primary model error: ${error.message}`); // 🔍 DEBUG LOG
-            if (error.response) {
-                console.error(`[Ollama] Response status: ${error.response.status}`);
-                console.error(`[Ollama] Response data: ${JSON.stringify(error.response.data)}`);
+            // Check for duplicates
+            if (response.payload && context.previousPayloads?.includes(response.payload)) {
+                console.warn(`[Ollama] ♻️ Duplicate payload generated: "${response.payload}". Retrying (${currentAttempt + 1}/${MAX_RETRIES})...`);
+                currentFeedback += `\n[SYSTEM WARNING] You just generated a duplicate payload: "${response.payload}". DO NOT REPEAT IT. Generate something DIFFERENT.`;
+                currentAttempt++;
+                continue;
             }
-            try {
-                const fallbackResponse = await callOllama(prompt, FALLBACK_MODEL);
-                currentModel = FALLBACK_MODEL; // Switch to fallback
-                return fallbackResponse;
-            } catch (fallbackError) {
-                console.error('[Ollama] Both models failed:', fallbackError);
-                throw new Error('Ollama service unavailable');
+
+            return response;
+
+        } catch (error: any) {
+            // If primary model fails, try fallback
+            if (currentModel === PRIMARY_MODEL) {
+                console.warn(`[Ollama] Primary model failed, trying fallback...`);
+                console.error(`[Ollama] Primary model error: ${error.message}`); // 🔍 DEBUG LOG
+
+                try {
+                    const fallbackResponse = await callOllama(prompt, FALLBACK_MODEL, context);
+                    currentModel = FALLBACK_MODEL; // Switch to fallback
+                    return fallbackResponse;
+                } catch (fallbackError) {
+                    console.error('[Ollama] Both models failed:', fallbackError);
+                    throw new Error('Ollama service unavailable');
+                }
             }
+            throw error;
         }
-
-        throw error;
     }
+
+    // If we exhausted retries, return failure or fallback
+    return {
+        payload: null,
+        reasoning: "Failed to generate unique payload after multiple retries.",
+        finished: true,
+        mode: "exhausted"
+    };
 }
 
 /**
@@ -255,6 +281,44 @@ function buildPrompt(feedback: string, context: any): string {
     const paramInfo = context.parameter ? `\n[Target Parameter: ${context.parameter}]` : '';
     const attemptInfo = context.attemptNumber ? `\n[Attempt #${context.attemptNumber}]` : '';
 
+    // Avoid modes
+    const avoidInfo = context.avoidModes && context.avoidModes.length > 0
+        ? `\n[CONSTRAINT] DO NOT USE MODES: ${context.avoidModes.join(', ')} (They proved ineffective)`
+        : '';
+
+    // Previous payloads summary
+    const historyInfo = context.previousPayloads && context.previousPayloads.length > 0
+        ? `\n[HISTORY] Previously tried: [${context.previousPayloads.slice(-3).map((p: string) => `"${p}"`).join(', ')}...] (DO NOT REPEAT THESE)`
+        : '';
+
+    // --- RL HEURISTICS & TIMEOUT AWARENESS ---
+    let heuristicGuidance = "";
+    let isFastMode = false;
+
+    if (context.modeStats) {
+        // 1. Identify Best Modes
+        const bestModes = Object.entries(context.modeStats)
+            .filter(([_, stats]: [string, any]) => {
+                const total = stats.successCount + stats.failureCount;
+                return total > 0 && (stats.successCount / total) > 0.3; // >30% success rate
+            })
+            .map(([mode]) => mode);
+
+        if (bestModes.length > 0) {
+            heuristicGuidance += `\n[INTELLIGENCE] The target appears VULNERABLE to: ${bestModes.join(', ').toUpperCase()}. PRIORITIZE THESE MODES.`;
+        }
+
+        // 2. Timeout Awareness (Slow Mode detection)
+        const slowModes = Object.entries(context.modeStats)
+            .filter(([_, stats]: [string, any]) => stats.avgTimeMs > 8000) // > 8 seconds is SLOW
+            .map(([mode]) => mode);
+
+        if (slowModes.length > 0) {
+            heuristicGuidance += `\n[PERFORMANCE] Modes ${slowModes.join(', ')} are responding VERY SLOWLY. If you use them, create SHORT, CONCISE payloads.`;
+            isFastMode = true; // Trigger prompt simplification
+        }
+    }
+
     const fingerprint = context.fingerprint
         ? `
 [FINGERPRINT]
@@ -264,10 +328,33 @@ Database: ${context.fingerprint.database || 'Unknown'}
 `
         : '\n[FINGERPRINT]\nUnknown\n';
 
+    // DYNAMIC PROMPT SELECTION
+    // If we need speed (Fast Mode), we use a stripped-down prompt to save token generation time
+    if (isFastMode) {
+        return `
+${heuristicGuidance}
+${fingerprint}
+${vectorInfo}${paramInfo}
+
+You are a SQLi generator. Strict JSON output.
+Stats: ${JSON.stringify(context.modeStats)}
+Avoid: ${context.avoidModes?.join(',')}
+
+FEEDBACK: ${feedback}
+
+Generate ONE payload.
+JSON Format: {"payload": "...", "reasoning": "...", "mode": "..."}
+`;
+    }
+
+    // Standard Full Prompt
     return `${SECURITY_TESTING_INSTRUCTION}
 
 ${vectorInfo}${paramInfo}${attemptInfo}
 ${fingerprint}
+${avoidInfo}
+${historyInfo}
+${heuristicGuidance}
 
 PREVIOUS ATTEMPT FEEDBACK:
 ${feedback}
@@ -332,7 +419,8 @@ async function callOllama(prompt: string, model: string, context?: any): Promise
         throw new Error('Ollama response missing payload field');
     }
 
-    // HARD SQLITE BLOCKER (Boolean + Stacked Queries)
+    // HARD SQLITE BLOCKER (Disabled to allow multi-vector exploration)
+    /*
     if (context?.fingerprint?.database?.toLowerCase() === "sqlite") {
         const p = (parsed.payload || "").toLowerCase();
 
@@ -362,6 +450,7 @@ async function callOllama(prompt: string, model: string, context?: any): Promise
             };
         }
     }
+    */
 
     console.log(`[Ollama] ✅ Generated in ${(elapsed / 1000).toFixed(1)}s`);
 
