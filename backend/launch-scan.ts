@@ -10,7 +10,7 @@ async function launch() {
   console.log('🚀 Launching a new AI-powered SQLi scan...');
 
   // --- معلومات أساسية للاختبار ---
-  const targetUrl = 'http://localhost:8080/rest/products/search'; // 👈 Reverted to Juice Shop Search API
+  const targetUrl = 'http://localhost:8080/rest/user/login'; // 👈 Login API Endpoint
 
   try {
     // --- الخطوة 0: الحصول على IDs صالحة تلقائيًا ---
@@ -57,11 +57,19 @@ async function launch() {
       scanId: newScan.id,
       targetUrl: targetUrl,
       organizationId: newScan.organizationId,
+      // 👇 GENERIC PLACEHOLDERS (Scanner will inject payloads into these keys)
+      requestMethod: 'POST',
+      requestBody: { email: 'generic_user', password: 'generic_pass' },
       technologyFingerprint: {
         server: 'Express',
         language: 'Node.js',
         database: 'SQLite',
       },
+      persona: {
+        name: 'WARRIOR', // Explicitly use Warrior for balanced attack
+        maxAttempts: 12, // Allow enough attempts
+        maxSuccessFindings: 2
+      }
     };
 
     // --- الخطوة 3: إضافة المهمة إلى الطابور ---

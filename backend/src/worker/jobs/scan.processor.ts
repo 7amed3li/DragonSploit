@@ -4,6 +4,7 @@ import { Job } from 'bullmq';
 import { ScanStatus } from '@prisma/client';
 import axios, { AxiosResponse } from 'axios';
 import { prisma } from '../../db';
+import { SCOUT_PERSONA, WARRIOR_PERSONA, ELDER_PERSONA, AttackerPersona } from '../config/personas';
 
 // --- بداية الدمج ---
 // استيراد جميع الطوابير المتخصصة التي أنشأناها
@@ -21,6 +22,7 @@ interface ScanJobData {
   scanId: string;
   targetId: string;
   targetUrl: string;
+  profile?: string; // e.g., 'lightning', 'balanced', 'deep'
 }
 
 // واجهة لتعريف شكل كائن بصمة التكنولوجيا
@@ -40,8 +42,15 @@ interface TechnologyFingerprint {
  * 4. ينهي مهمة التنسيق.
  */
 export const processScanJob = async (job: Job<ScanJobData>): Promise<void> => {
-  const { scanId, targetUrl } = job.data;
+  const { scanId, targetUrl, profile } = job.data;
   console.log(`[Orchestrator] Starting orchestration for scan ID: ${scanId} on URL: ${targetUrl}`);
+
+  // Determine Persona based on profile string
+  let selectedPersona: AttackerPersona = WARRIOR_PERSONA; // Default
+  if (profile === 'lightning') selectedPersona = SCOUT_PERSONA;
+  else if (profile === 'deep') selectedPersona = ELDER_PERSONA;
+
+  console.log(`[Orchestrator] Selected Persona: ${selectedPersona.name}`);
 
   // تحديث الحالة إلى RUNNING
   await prisma.scan.update({
@@ -52,7 +61,7 @@ export const processScanJob = async (job: Job<ScanJobData>): Promise<void> => {
   try {
     // إرسال طلب HTTP وجمع البصمات
     const response = await axios.get(targetUrl, {
-      httpsAgent: new (require('https'  )).Agent({ rejectUnauthorized: false }),
+      httpsAgent: new (require('https')).Agent({ rejectUnauthorized: false }),
       timeout: 15000,
       headers: { 'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36' },
     });
@@ -62,7 +71,13 @@ export const processScanJob = async (job: Job<ScanJobData>): Promise<void> => {
     // --- بداية منطق التنسيق المحدث والكامل ---
     console.log(`[Orchestrator] Analyzing fingerprint and dispatching specialized jobs...`);
     let dispatchedJobsCount = 0;
-    const jobPayload = { scanId: scanId, targetUrl: targetUrl };
+
+    // Pass Persona to all sub-jobs
+    const jobPayload = {
+      scanId: scanId,
+      targetUrl: targetUrl,
+      persona: selectedPersona
+    };
 
     // 1. فحوصات إطارات العمل (Frameworks)
     if (fingerprint.detectedFrameworks?.includes('WordPress')) {
@@ -97,6 +112,7 @@ export const processScanJob = async (job: Job<ScanJobData>): Promise<void> => {
 
     console.log(`[Orchestrator] Dispatched a total of ${dispatchedJobsCount} specialized jobs.`);
     // --- نهاية منطق التنسيق ---
+
 
     // تحديث الفحص الرئيسي وتخزين البصمة
     await prisma.scan.update({

@@ -56,9 +56,10 @@ export function startWorkers() {
 
     const sqliParamWorker = new Worker(sqliParamQueue.name, sqliParamProcessorWrapper, {
         connection: sqliParamQueue.opts.connection,
-        concurrency: 8, // Higher concurrency for granular jobs
+        concurrency: 1, // Reduced to 1 for LOCAL stability (prevents OOM)
+        lockDuration: 1500000, // 25 minutes lock! Warrior needs 20m.
         limiter: {
-            max: 5, // Limit burst rate to prevent overloading Ollama
+            max: 1, // Strict serial processing
             duration: 1000
         }
     });

@@ -28,6 +28,7 @@ export interface AIContext {
     vector?: string;
     parameter?: string;
     targetUrl?: string;
+    method?: string; // GET, POST, etc.
     attemptNumber?: number;
     fingerprint?: any;
     chatSession?: ChatSession; // For Gemini continuity
@@ -38,6 +39,7 @@ export interface AIContext {
         failureCount: number;
         avgTimeMs: number;
     }>;
+    persona?: any; // Allow passing the AttackerPersona
 }
 
 export interface AIResponse {
@@ -45,6 +47,7 @@ export interface AIResponse {
     reasoning: string;
     mode?: string;
     finished: boolean;
+    confidence?: number;
     provider: 'ollama' | 'groq' | 'gemini' | 'fallback';
 }
 

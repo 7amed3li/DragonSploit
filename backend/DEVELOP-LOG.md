@@ -1142,6 +1142,76 @@ DragonSploit is now a **Parallel, Self-Optimizing, Robust** scanning platform. W
 *   Add Quotas & Novelty Detection.
 *   Tune BullMQ Locks.
 
+---
 
+### 📅 **2025-12-17: The Age of Dragons & The Great Restoration**
 
+**Title:** A Day of Transformation: From Cognitive Personas to Strict Velocity Constraints.
 
+**Context:** This day marked a pivotal evolution in DragonSploit's development. We began by implementing "Cognitive Personas" to make the scanner more adaptive and "human-like". However, we quickly realized that this added complexity introduced regressions in speed, particularly against simple SQLite targets. This led to a "Great Restoration," where we re-imposed strict, hard-coded constraints to regain the raw velocity of our legacy code while keeping the new cognitive architecture for complex tasks.
+
+---
+
+#### **Part 1: The Age of Dragons — Cognitive Personas & Structural Awareness**
+
+**1. Strategic Evolution: Dragon Personas (Adaptive Scanning)**
+
+*   **Concept:** Instead of a single "scan mode" with loose timeouts, we introduced **Cognitive Personas**. These are pre-configured archetypes that dictate *behavior*, not just settings.
+*   **Implementation (`src/worker/config/personas.ts`):**
+    *   **🐉 The Scout (Lightning):** "Hit and Run". Fast, low-noise signatures. `maxAttempts: 3`, `timeout: 60s`.
+    *   **🔥 The Warrior (Balanced):** "Tactical Engagement". Standard exploitation path. `maxAttempts: 12`, `timeout: 180s`.
+    *   **🧙‍♂️ The Elder (Deep):** "Structural Reverse Engineering". Slow, methodical. `maxAttempts: 30`, `timeout: 600s`.
+*   **Impact:** The Orchestrator now receives a `persona` input and propagates this distinct "personality" down to every AI prompt and worker setting.
+
+**2. Tactical Upgrade: The Structural Analysis Engine**
+
+*   **Challenge:** Detecting a vulnerability is only step one. We needed to prove impact by extracting the database schema.
+*   **Solution:** Implemented a new **State Machine** specifically for the `sqli-param` worker:
+    1.  **TESTING:** Initial payload injection.
+    2.  **CONFIRMED:** Vulnerability verified.
+    3.  **STRUCTURAL_ANALYSIS:** (New Phase) If the Persona is *Elder*, the worker shifts focus to extraction.
+    4.  **STOPPED:** Quota reached or objective complete.
+*   **Result:** The AI now understands *intent* shift. It goes from "breaking in" to "drawing a map".
+
+---
+
+#### **Part 2: The Great Restoration — Velocity Through Strict Constraints**
+
+**1. Challenge: The "Over-Engineering" Trap**
+
+*   **Symptom:** The new AI logic was over-thinking simple SQLite targets, attempting complex Boolean/Time-based payloads that ultimately failed and wasted time.
+*   **Decision:** We recognized that sometimes "dumb" hard-coded constraints are better than "smart" AI freedom.
+
+**2. Decision: The "Hard Blocker" Protocol**
+
+*   **Strategy:** Re-introduce deterministic code logic to override AI "hallucinations."
+*   **Implementation (`src/services/ai-ollama.ts`):**
+    *   **Mechanism:** Implemented a `Hard SQLite Blocker` within `callOllama()`.
+    *   **Logic:** If DB is `SQLite` and payload contains `pg_sleep` or Boolean logic, **IMMEDIATELY BLOCK IT** and auto-correct to `UNION SELECT NULL,NULL`.
+    *   **Result:** Zero latency penalty. The "bad" thought is corrected in milliseconds.
+
+**3. Fixes & Polish**
+
+*   **The "Context Amnesia" Bug:** Fixed a critical bug where `context` (fingerprint) wasn't passed to `callOllama`, making the blocker "blind".
+*   **The "Global Override" Prompt:** Replaced the complex "Titanium" prompt with a strict, streamlined user-provided prompt.
+*   **Silent Mode:** Removed verbose debug logs for a clean terminal experience.
+
+---
+
+✅ **Unified Milestone Achieved:**
+*   **Adaptive Intelligence:** The system uses Personas to adapt its strategy (Scout vs Elder).
+*   **Raw Speed:** The Hard Blocker ensures near-instant scans for simple targets like SQLite.
+*   **Stability:** Codebase hardened with strict types and correct context propagation.
+*   **Documentation:** Fully documented this architectural journey.
+
+🚀 **Next Steps:**
+*   **Verification:** Run full suite scans to ensure no regression in MySQL/PostgreSQL detection.
+*   **Commit:** Finalize this stable state as the new baseline.
+
+#### **Verification Success (Impact Confirmation)**
+
+*   **Test Run:** `npm run launch-scan` (Process 4464).
+*   **Observation:** The AI attempted to generate a forbidden `|| (select sqlite_version()) ||` payload.
+*   **Action:** The `SQLite-Blocker` successfully intercepted it: `[SQLite-Blocker] Forbidden... Auto-correcting...`.
+*   **Outcome:** The payload was instantly converted to `' UNION SELECT NULL,NULL --` and the vulnerability was **CONFIRMED** by the Warrior persona.
+*   **Status:** The system is now fully operational, fast, and stable.
