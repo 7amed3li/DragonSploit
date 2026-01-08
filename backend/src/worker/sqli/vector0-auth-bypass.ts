@@ -2,7 +2,9 @@ import { Job } from 'bullmq';
 import { PrismaClient, Severity, VulnerabilityType } from '@prisma/client';
 import { URL, URLSearchParams } from 'url';
 import { recordVulnerability, executeRequest, RequestResult } from './common';
-import axios, { AxiosRequestConfig } from 'axios'; // نحتاج axios للـ POST المخصص هنا
+import axios, { AxiosRequestConfig } from 'axios';
+import { VisualVerifier, Severity as VisualSeverity } from '../../services/visual-verifier';
+
 
 // ============================================================================
 // 🛠️ TYPES & INTERFACES
@@ -122,24 +124,58 @@ export async function executeAuthBypassAttack(job: Job, prisma: PrismaClient): P
                 const hasWelcomeMessage = /welcome|logged in|success|authenticated/.test(responseBodyStr);
 
                 if (hasAuthToken || setsSessionCookie || isRedirectSuccess || (response.status === 200 && hasWelcomeMessage)) {
-                    console.log(`[Vector 0] ✅ AUTH BYPASS CONFIRMED: ${technique.name}`);
+                    console.log(`[Vector 0] 🔍 Potential Auth Bypass detected: ${technique.name}`);
+                    console.log(`[Vector 0] 🎯 Starting Visual Verification...`);
                     
-                    const proof = `
-                        Endpoint: ${loginUrl}
-                        Technique: ${technique.name}
-                        Payload: ${JSON.stringify(technique.payload)}
-                        Status: ${response.status}
-                        Indicators: ${hasAuthToken ? 'Token Found ' : ''}${setsSessionCookie ? 'Session Cookie ' : ''}${isRedirectSuccess ? 'Redirected ' : ''}
-                    `.trim();
+                    // 🆕 التحقق البصري عبر المتصفح
+                    const payloadStr = typeof technique.payload.email === 'string' 
+                        ? technique.payload.email 
+                        : JSON.stringify(technique.payload.email);
+                    
+                    const verifier = new VisualVerifier({ headless: false });
+                    const visualResult = await verifier.verifyAuthBypass(
+                        {
+                            loginUrl: loginUrl.replace('/rest/user/login', '/#/login'), // تحويل API إلى UI
+                            payload: payloadStr,
+                            passwordValue: typeof technique.payload.password === 'string' 
+                                ? technique.payload.password 
+                                : 'password'
+                        },
+                        {
+                            scanId: scanId,
+                            severity: VisualSeverity.CRITICAL,
+                            vulnerabilityType: 'AUTH_BYPASS'
+                        }
+                    );
+                    
+                    if (visualResult.verified) {
+                        console.log(`[Vector 0] ✅✅✅ AUTH BYPASS VISUALLY CONFIRMED! ✅✅✅`);
+                        
+                        const proof = `
+                            Endpoint: ${loginUrl}
+                            Technique: ${technique.name}
+                            Payload: ${JSON.stringify(technique.payload)}
+                            Status: ${response.status}
+                            Visual Proof: ${visualResult.proofs?.screenshotProof || 'N/A'}
+                            Video: ${visualResult.videoPath || 'N/A'}
+                            Reason: ${visualResult.reason}
+                        `.trim();
 
-                    const description = `Authentication Bypass vulnerability detected using '${technique.name}'. The scanner successfully logged in without valid credentials.`;
-                    
-                    await recordVulnerability(prisma, scanId, VulnerabilityType.SQL_INJECTION, Severity.CRITICAL, description, proof);
-                    foundVulnerability = true;
-                    
-                    // توقف فوراً عند العثور على ثغرة لتوفير الوقت (Fail-Fast / Succeed-Fast)
-                    // إلا إذا كنت تريد جمع كل الطرق الممكنة
-                    return true; 
+                        const description = `Authentication Bypass vulnerability VISUALLY CONFIRMED using '${technique.name}'. Browser verification shows successful login without valid credentials.`;
+                        
+                        await recordVulnerability(prisma, scanId, VulnerabilityType.SQL_INJECTION, Severity.CRITICAL, description, proof);
+                        foundVulnerability = true;
+                        
+                        return true; 
+                    } else {
+                        console.log(`[Vector 0] ⚠️ Visual verification failed: ${visualResult.reason}`);
+                        console.log(`[Vector 0] 📝 Recording as potential vulnerability (not visually confirmed)`);
+                        
+                        // سجل الثغرة المحتملة لكن بخطورة أقل
+                        const proof = `[NOT VISUALLY VERIFIED] Endpoint: ${loginUrl}, Technique: ${technique.name}`;
+                        await recordVulnerability(prisma, scanId, VulnerabilityType.SQL_INJECTION, Severity.MEDIUM, 
+                            `Potential Auth Bypass (not visually confirmed): ${technique.name}`, proof);
+                    }
                 }
 
             } catch (error: any) {
