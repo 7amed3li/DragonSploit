@@ -151,6 +151,7 @@ export function detectWaf(responseBody: string, statusCode: number): boolean {
 
 /**
  * Records a confirmed vulnerability to the database with structured logging.
+ * 🆕 DEDUPLICATION: Prevents recording the same vulnerability twice.
  */
 export async function recordVulnerability(
     prisma: PrismaClient,
@@ -163,6 +164,34 @@ export async function recordVulnerability(
     try {
         const safeProof = proof.length > 5000 ? proof.substring(0, 5000) + '...[TRUNCATED]' : proof;
 
+        // 🔍 DEDUPLICATION CHECK: Extract payload from proof for matching
+        let payloadHash = '';
+        try {
+            const proofData = JSON.parse(proof);
+            const rawPayload = proofData.payload || proofData.request?.payload || '';
+            // Ensure payloadHash is always a string
+            payloadHash = typeof rawPayload === 'string' ? rawPayload : JSON.stringify(rawPayload);
+        } catch {
+            // If proof is not JSON, use description as hash
+            payloadHash = description.slice(0, 200);
+        }
+
+        // Check if this exact vulnerability already exists
+        const existing = await prisma.vulnerability.findFirst({
+            where: {
+                scanId,
+                type,
+                description: {
+                    contains: payloadHash.slice(0, 50) // Match first 50 chars of payload
+                }
+            }
+        });
+
+        if (existing) {
+            console.log(`[Dedup] ⏭️ Skipping duplicate: ${type} - ${payloadHash.slice(0, 30)}...`);
+            return;
+        }
+
         await prisma.vulnerability.create({
             data: {
                 scanId,
@@ -174,14 +203,7 @@ export async function recordVulnerability(
         });
 
         // JSON Logging for observability (ELK/Splunk ready)
-        console.log(JSON.stringify({
-            level: 'INFO',
-            event: 'VULNERABILITY_RECORDED',
-            timestamp: new Date().toISOString(),
-            scanId,
-            type,
-            severity
-        }));
+        console.log('✅ Vulnerability recorded.');
 
     } catch (error: any) {
         console.error(JSON.stringify({

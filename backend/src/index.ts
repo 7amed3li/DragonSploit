@@ -12,6 +12,7 @@ import cors from 'cors';
 import cookieParser from 'cookie-parser';
 
 import { AppError } from './utils/errors';
+import { setupSecurity } from './middleware/security';
 
 // --- Import Routers ---
 import authRouter from './routes/auth';
@@ -36,6 +37,7 @@ async function main() {
   console.log('✅ Database connection successful!');
 
   // --- Middlewares ---
+  setupSecurity(app); // 🛡️ Apply security middleware
   app.use(cors());
   app.use(express.json());
   app.use(cookieParser());

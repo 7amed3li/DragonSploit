@@ -17,8 +17,8 @@ COPY prisma ./prisma/
 # قم بتثبيت جميع المكتبات
 RUN npm install
 
-# قم بإنشاء عميل Prisma باستخدام Data Proxy لتجنب تنزيل المحركات
-RUN npx prisma generate --data-proxy
+# قم بإنشاء عميل Prisma (بدون Data Proxy للبيئة المحلية)
+RUN npx prisma generate
 
 # انسخ باقي ملفات التطبيق
 COPY . .

@@ -7,6 +7,8 @@ import { PrismaClient } from '@prisma/client';
 // استيراد قائمة الانتظار والمعالج الخاص بالـ SQLi (كمثال)
 import { sqliQueue } from './queues/sqli';
 import { processSqliJob } from './jobs/sqli';
+import { sqliParamQueue } from './queues/sqli-param';
+import { processSqliParamJob } from './jobs/sqli-param';
 
 // إنشاء نسخة PrismaClient واحدة لهذه العملية (العامل)
 const prisma = new PrismaClient();
@@ -38,20 +40,46 @@ export function startWorkers() {
     sqliWorker.on('completed', (job) => {
         console.log(`✅ [SQLi] Job ${job.id} has completed.`);
     });
-    
+
     sqliWorker.on('failed', (job, err) => {
         console.error(`❌ [SQLi] Job ${job?.id} has failed with error: ${err.message}`);
     });
 
     console.log(`👷 Worker for [${sqliQueue.name}] queue is running.`);
 
-    // ... (يمكنك إضافة بقية العمال هنا بنفس الطريقة)
     // -----------------------------------------------------
+    // SQLi Parameter Worker (Child)
+    // -----------------------------------------------------
+    const sqliParamProcessorWrapper = async (job: Job) => {
+        return (processSqliParamJob as ProcessorFunction)(job, prisma);
+    };
+
+    const sqliParamWorker = new Worker(sqliParamQueue.name, sqliParamProcessorWrapper, {
+        connection: sqliParamQueue.opts.connection,
+        concurrency: 1, // Reduced to 1 for LOCAL stability (prevents OOM)
+        lockDuration: 1500000, // 25 minutes lock! Warrior needs 20m.
+        limiter: {
+            max: 1, // Strict serial processing
+            duration: 1000
+        }
+    });
+
+    sqliParamWorker.on('completed', (job) => {
+        console.log(`✅ [SQLi-Param] Job ${job.id} (param: ${job.data.param}) completed.`);
+    });
+
+    sqliParamWorker.on('failed', (job, err) => {
+        console.error(`❌ [SQLi-Param] Job ${job?.id} failed: ${err.message}`);
+    });
+
+    console.log(`👷 Worker for [${sqliParamQueue.name}] queue is running.`);
+
 
     // دالة الإغلاق الآمن
     const gracefulShutdown = async () => {
         console.log('...Initiating graceful shutdown for workers...');
         await sqliWorker.close();
+        await sqliParamWorker.close();
         await prisma.$disconnect();
         console.log('Worker connections closed. Exiting worker process.');
         process.exit(0);

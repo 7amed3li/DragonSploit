@@ -28,9 +28,18 @@ export interface AIContext {
     vector?: string;
     parameter?: string;
     targetUrl?: string;
+    method?: string; // GET, POST, etc.
     attemptNumber?: number;
     fingerprint?: any;
     chatSession?: ChatSession; // For Gemini continuity
+    previousPayloads?: string[];
+    avoidModes?: string[];
+    modeStats?: Record<string, {
+        successCount: number;
+        failureCount: number;
+        avgTimeMs: number;
+    }>;
+    persona?: any; // Allow passing the AttackerPersona
 }
 
 export interface AIResponse {
@@ -38,6 +47,7 @@ export interface AIResponse {
     reasoning: string;
     mode?: string;
     finished: boolean;
+    confidence?: number;
     provider: 'ollama' | 'groq' | 'gemini' | 'fallback';
 }
 
@@ -127,6 +137,23 @@ class AIProviderManager {
             finished: true,
             provider: 'fallback'
         };
+    }
+
+    /**
+     * Judge 2: Analyze page content for authentication success
+     */
+    async analyzePageContent(pageText: string): Promise<{
+        authenticated: boolean;
+        confidence: number;
+        reason: string;
+    }> {
+        if (!await isOllamaAvailable()) {
+            return { authenticated: false, confidence: 0, reason: 'Ollama Unavailable' };
+        }
+        // Direct call to Ollama implementation
+        // Limiting text size to prevent context overflow is handled in ai-ollama.ts
+        const { analyzePageContent } = await import('./ai-ollama');
+        return analyzePageContent(pageText);
     }
 
     /**

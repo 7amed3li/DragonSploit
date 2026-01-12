@@ -7,7 +7,7 @@ services:
     container_name: dragonsploit_db
     restart: always
     ports:
-      - "5433:5432"
+      - "55432:5432"
     environment:
       POSTGRES_USER: dragonsploit_user
       POSTGRES_PASSWORD: testpassword
@@ -34,6 +34,7 @@ services:
       - DATABASE_URL=postgresql://dragonsploit_user:testpassword@db:5432/dragonsploit_dev
       - REDIS_HOST=redis
       - REDIS_PORT=6379
+      - REDIS_URL=redis://redis:6379 # Override .env URL
     depends_on:
       - db
       - redis

@@ -148,6 +148,13 @@ model Vulnerability {
   resolvedAt     DateTime?         // 🆕 متى تم الحل
   resolvedByUserId String?         // 🆕 من قام بالحل
 
+  // 🆕 حقول الإثبات البصري (Visual Proof)
+  screenshotPath String?           // مسار الـ Screenshot
+  videoPath      String?           // مسار الـ Video (للثغرات العالية)
+  htmlSnapshot   String?   @db.Text // نسخة HTML من الصفحة
+  verifiedAt     DateTime?         // متى تم التحقق البصري
+  isVisuallyVerified Boolean @default(false) // هل تم التحقق بصرياً؟
+
   // --- العلاقات ---
   scan             Scan              @relation(fields: [scanId], references: [id], onDelete: Cascade)
   scanId           String
@@ -156,6 +163,7 @@ model Vulnerability {
   resolvedByUser   User?             @relation("ResolvedVulnerability", fields: [resolvedByUserId], references: [id])
   
   @@index([scanId, severity]) // 🆕 فهرس لتحسين فلترة الثغرات حسب الفحص والخطورة
+  @@index([isVisuallyVerified]) // فهرس للفلترة حسب التحقق البصري
 }
 
 model ScanConfiguration {

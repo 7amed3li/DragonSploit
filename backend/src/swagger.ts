@@ -61,7 +61,7 @@ const options: swaggerJSDoc.Options = {
           properties: {
             email: { type: 'string', format: 'email', example: 'user@example.com' },
             name: { type: 'string', example: 'John Doe' },
-            password: { type: 'string', format: 'password', example: 'Password123!' },
+            password: { type: 'string', format: 'password', example: 'your-secure-password' },
           },
         },
         LoginInput: {
@@ -69,7 +69,7 @@ const options: swaggerJSDoc.Options = {
           required: ['email', 'password'],
           properties: {
             email: { type: 'string', format: 'email', example: 'user@example.com' },
-            password: { type: 'string', format: 'password', example: 'Password123!' },
+            password: { type: 'string', format: 'password', example: 'your-secure-password' },
           },
         },
         CreateTargetInput: {
