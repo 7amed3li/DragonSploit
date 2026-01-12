@@ -6,7 +6,8 @@ import { scanQueue } from './src/worker/queues/scan'; // Make sure to export sca
 
 // Fallback for local testing - Only set if not already defined
 if (!process.env.DATABASE_URL) {
-    process.env.DATABASE_URL = 'postgresql://dragonsploit_user:testpassword@localhost:5433/dragonsploit_dev';
+    console.error('❌ DATABASE_URL is not defined in .env');
+    process.exit(1);
 }
 
 console.log('🔧 [DEBUG] Using DB URL:', process.env.DATABASE_URL);
