@@ -134,7 +134,7 @@ async function runSingleTest(
     const injectionPayload = {
         [vector.injectionPoint.payloadField]: payloadValue,
         // Add generic fields often required by registration/update
-        password: "TestPassword123!",
+        password: process.env.TEST_PASSWORD || "password",
         email: `${baseValue}@test.com`
     };
 

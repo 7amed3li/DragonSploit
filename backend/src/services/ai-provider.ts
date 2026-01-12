@@ -140,6 +140,23 @@ class AIProviderManager {
     }
 
     /**
+     * Judge 2: Analyze page content for authentication success
+     */
+    async analyzePageContent(pageText: string): Promise<{
+        authenticated: boolean;
+        confidence: number;
+        reason: string;
+    }> {
+        if (!await isOllamaAvailable()) {
+            return { authenticated: false, confidence: 0, reason: 'Ollama Unavailable' };
+        }
+        // Direct call to Ollama implementation
+        // Limiting text size to prevent context overflow is handled in ai-ollama.ts
+        const { analyzePageContent } = await import('./ai-ollama');
+        return analyzePageContent(pageText);
+    }
+
+    /**
      * Get provider statistics
      */
     getStats() {
