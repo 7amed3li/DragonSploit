@@ -61,6 +61,8 @@ workers.forEach(workerInfo => {
     const worker = new Worker(workerInfo.name, workerProcessorWrapper, {
         connection: redisConnection,
         concurrency: workerInfo.concurrency,
+        lockDuration: 300000, // 5 minutes (Safe for slow local AI)
+        maxStalledCount: 1,   // Prevent aggressive re-processing
     });
 
     worker.on('completed', (job) => {
