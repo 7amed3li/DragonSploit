@@ -211,6 +211,13 @@ export class VisualVerifier {
             return false;
         }
     }
+
+    /**
+     * Close the verifier and cleanup resources
+     */
+    async close(): Promise<void> {
+        await this.browserManager.close();
+    }
 }
 
 // Export all components

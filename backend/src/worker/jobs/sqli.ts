@@ -2,6 +2,7 @@
 import { Job } from 'bullmq';
 import { PrismaClient } from '@prisma/client';
 import { sqliParamQueue } from '../queues/sqli-param';
+import { executeAuthBypassAttack } from '../sqli/vector0-auth-bypass';
 
 const COMMON_FALLBACK_PARAMS = ['id', 'q', 'search', 'query', 'page', 'category', 'item', 'view'];
 
@@ -10,6 +11,29 @@ export const processSqliJob = async (job: Job, prisma: PrismaClient): Promise<vo
     console.log(`[SQLi Dispatcher] Starting scan fan-out for job ${job.id}`);
     console.log(`[SQLi Dispatcher] Target: ${targetUrl} [${requestMethod || 'GET'}]`);
     if (persona) console.log(`[SQLi Dispatcher] Using Persona: ${persona.name}`);
+
+    // 🛑 Wave 0 REMOVED: Auth Bypass is now handled by a dedicated queue before this point.
+    // If we are here, we either have a token or we are fuzzing unauthenticated.
+    
+    // 💡 EXCEPT: If this job is EXPLICITLY tagged as 'AUTH_BYPASS' (e.g. Login API)
+    if (job.data.intent === 'AUTH_BYPASS') {
+        console.log(`[SQLi Dispatcher] 🛡️ Explicit Auth Bypass Job Triggered!`);
+        try {
+            const authBypassFound = await executeAuthBypassAttack(job, prisma);
+            if (authBypassFound) {
+                 console.log(`[SQLi Dispatcher] ✅ Auth Bypass CONFIRMED!`);
+                 return; // Stop here, no need to fuzz parameters for the login form itself if vectors are exhausted
+            }
+        } catch (error: any) {
+            console.warn(`[SQLi Dispatcher] ⚠️ Auth Bypass failed: ${error.message}`);
+        }
+    }
+    
+    if (job.data.authDetails) {
+        console.log(`[SQLi Dispatcher] 🔑 Using existing Auth Token: ${job.data.authDetails.token.substring(0, 10)}...`);
+    } else {
+        console.log(`[SQLi Dispatcher] ℹ️ Running unauthenticated scan.`);
+    }
 
     try {
         let paramsToScan: string[] = [];

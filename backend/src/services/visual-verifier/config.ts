@@ -77,6 +77,8 @@ export const SUCCESS_INDICATORS = {
             /profile/i,
             /account/i,
             /main/i,
+            /#\/search/i, // Juice Shop specific
+            /#\/basket/i, // Juice Shop specific
         ],
         textPatterns: [
             /welcome/i,
@@ -85,6 +87,9 @@ export const SUCCESS_INDICATORS = {
             /my account/i,
             /logout/i,
             /sign out/i,
+            /your basket/i, // Juice Shop specific
+            /orders/i,      // Juice Shop specific
+            /score board/i, // Juice Shop specific
         ],
         excludePatterns: [
             /invalid/i,
@@ -92,6 +97,7 @@ export const SUCCESS_INDICATORS = {
             /failed/i,
             /incorrect/i,
             /denied/i,
+            /server error/i,
         ],
     },
     

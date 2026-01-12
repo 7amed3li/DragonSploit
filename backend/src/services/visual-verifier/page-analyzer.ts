@@ -25,64 +25,85 @@ export class PageAnalyzer {
      */
     async analyzeAuthBypass(page: Page, originalUrl: string): Promise<AnalysisResult> {
         const currentUrl = page.url();
-        const indicators = SUCCESS_INDICATORS.authBypass;
-        
-        // 1. فحص تغير الـ URL
-        for (const pattern of indicators.urlPatterns) {
-            if (pattern.test(currentUrl) && !pattern.test(originalUrl)) {
-                return {
-                    success: true,
-                    reason: 'URL changed to authenticated area',
-                    evidence: {
-                        url: currentUrl,
-                        matchedPattern: pattern.toString(),
-                    },
-                };
-            }
+        console.log(`[PageAnalyzer] 🕵️‍♂️ Analyzing: ${currentUrl}`);
+
+        let confidenceScore = 0;
+        let reasons: string[] = [];
+
+        // 1. URL Analysis
+        if (currentUrl !== originalUrl && !currentUrl.includes('login') && !currentUrl.includes('error')) {
+            confidenceScore += 30;
+            reasons.push('URL Changed (+30)');
         }
-        
-        // 2. فحص محتوى الصفحة لمؤشرات النجاح
-        const pageContent = await page.content();
+
+        // 2. Form Analysis
+        try {
+            const loginForm = await page.$('form input[type="password"]');
+            if (!loginForm) {
+                confidenceScore += 40;
+                reasons.push('Login Form Gone (+40)');
+            }
+        } catch (e) {}
+
+        // 3. Text Analysis
         const pageText = await page.innerText('body').catch(() => '');
-        
-        // فحص وجود كلمات النجاح
-        for (const pattern of indicators.textPatterns) {
-            if (pattern.test(pageText)) {
-                // التأكد من عدم وجود كلمات الفشل
-                const hasExclude = indicators.excludePatterns.some(p => p.test(pageText));
-                if (!hasExclude) {
-                    return {
-                        success: true,
-                        reason: 'Success text found on page',
-                        evidence: {
-                            matchedPattern: pattern.toString(),
-                            matchedText: pageText.substring(0, 200),
-                        },
-                    };
-                }
+        // Check for Explicit Errors first (Kill switch)
+        const errorText = ['invalid password', 'try again', 'access denied', 'wrong credentials'];
+        if (errorText.some(w => pageText.toLowerCase().includes(w))) {
+             confidenceScore -= 100;
+             reasons.push('Explicit Error (-100)');
+        } else {
+            // Check for Success Keywords
+            const strongSuccess = ['welcome', 'dashboard', 'my account', 'logout', 'sign out', 'profile'];
+            if (strongSuccess.some(w => pageText.toLowerCase().includes(w))) {
+                confidenceScore += 40;
+                reasons.push('Success Keywords (+40)');
             }
         }
-        
-        // 3. فحص وجود عناصر تدل على تسجيل الدخول
-        const logoutButton = await page.$('a:has-text("logout"), button:has-text("logout"), a:has-text("sign out")');
-        if (logoutButton) {
+
+        // 4. Cookie Analysis
+        try {
+            const cookies = await page.context().cookies();
+            const sessionCookies = cookies.filter(c => 
+                c.name.toLowerCase().includes('sess') || 
+                c.name.toLowerCase().includes('token') || 
+                c.name.toLowerCase().includes('id')
+            );
+            if (sessionCookies.length > 0) {
+                confidenceScore += 10;
+                reasons.push(`Cookies Found (+10)`);
+            }
+        } catch (e) {}
+
+        console.log(`[PageAnalyzer] 🧠 Judge 1.5 Score: ${confidenceScore}/100`);
+
+        // DECISION: FAST TRACK
+        if (confidenceScore >= 80) {
+             return { success: true, reason: `Judge 1.5 High Confidence: ${reasons.join(', ')}`, evidence: { url: currentUrl } };
+        }
+        if (confidenceScore < 40) { // < 40 is Fail. 40-79 is Ambiguous.
+             return { success: false, reason: `Judge 1.5 Low Confidence (${confidenceScore})`, evidence: { url: currentUrl } };
+        }
+
+        // AMBIGUOUS -> AI
+        console.log(`[PageAnalyzer] ⚖️ Ambiguous (${confidenceScore}). Escalating to AI...`);
+        try {
+            const { AIProvider } = await import('../ai-provider');
+            const verdict = await AIProvider.analyzePageContent(pageText.substring(0, 3000));
             return {
-                success: true,
-                reason: 'Logout button found - user is authenticated',
-                evidence: {
-                    matchedText: 'Logout/Sign out button present',
-                },
+                success: verdict.authenticated,
+                reason: verdict.reason,
+                evidence: { url: currentUrl }
+            };
+        } catch (e: any) {
+            console.error(`[PageAnalyzer] AI Failed: ${e.message}`);
+             // Fallback: If score > 60, Success. Else Fail.
+            return {
+                success: confidenceScore > 60,
+                reason: `AI Failed. Heuristic Score: ${confidenceScore}`,
+                evidence: { url: currentUrl }
             };
         }
-        
-        // فشل
-        return {
-            success: false,
-            reason: 'No authentication indicators found',
-            evidence: {
-                url: currentUrl,
-            },
-        };
     }
     
     /**

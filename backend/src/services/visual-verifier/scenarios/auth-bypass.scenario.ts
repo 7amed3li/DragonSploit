@@ -80,8 +80,38 @@ export class AuthBypassScenario {
             
             // 5. Submit the form
             console.log('[AuthBypass] Step 5: Submitting form...');
+            
+            // 🛡️ OVERLAY DEFENSE: Handle annoyances like "Welcome" banners or Cookie dialogs
+            try {
+                // Strategy A: Press Escape (Works for most modals)
+                await page.keyboard.press('Escape');
+                await page.waitForTimeout(500);
+
+                // Strategy B: Click common dismiss buttons if they exist
+                const dismissSelectors = [
+                    'button[aria-label="Close"]', 
+                    '.close-button',
+                    'text=Dismiss', 
+                    'text=Close', 
+                    'text=Okay', 
+                    'text=I understand'
+                ];
+                for (const selector of dismissSelectors) {
+                    if (await page.$(selector)) {
+                        await page.click(selector, { timeout: 1000 }).catch(() => {});
+                    }
+                }
+            } catch (e) { /* Ignore dismissal errors */ }
+
             if (fields.submitButton) {
-                await fields.submitButton.click();
+                try {
+                    // Try normal click first
+                    await fields.submitButton.click({ timeout: 5000 });
+                } catch (e) {
+                    console.log('[AuthBypass] ⚠️ Normal click blocked, forcing click...');
+                    // Strategy C: Force click (bypasses pointer events check)
+                    await fields.submitButton.click({ force: true });
+                }
             } else {
                 // Try pressing Enter
                 await fields.usernameField.press('Enter');
