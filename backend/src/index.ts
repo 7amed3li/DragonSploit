@@ -7,18 +7,20 @@ dotenv.config();
 // الآن نستورد باقي المكتبات والملفات
 import express, { Express, Request, Response, NextFunction } from 'express';
 import { PrismaClient } from '@prisma/client';
-import { Server } from 'http';
+import http from 'http';
 import cors from 'cors';
 import cookieParser from 'cookie-parser';
 
 import { AppError } from './utils/errors';
 import { setupSecurity } from './middleware/security';
+import { logger } from './utils/logger';
 
 // --- Import Routers ---
 import authRouter from './routes/auth';
 import organizationRouter from './routes/kurum';
 import targetRouter from './routes/target';
 import scanRouter from './routes/scans';
+import vulnerabilityRouter from './routes/vulnerability';
 
 // --- Import Swagger and Worker Loader ---
 import { setupSwagger } from './swagger';
@@ -37,8 +39,24 @@ async function main() {
   console.log('✅ Database connection successful!');
 
   // --- Middlewares ---
+  app.use(cors({
+    origin: ['http://localhost:5173', 'http://localhost:4173'], // Restrict to frontend dev/preview ports
+    credentials: true,
+    methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
+    allowedHeaders: ['Content-Type', 'Authorization', 'X-Requested-With', 'Accept'],
+  }));
+
   setupSecurity(app); // 🛡️ Apply security middleware
-  app.use(cors());
+  
+  // Custom Request Logger
+  app.use((req, res, next) => {
+    console.log(`[${new Date().toISOString()}] ${req.method} ${req.url}`);
+    if (req.method === 'OPTIONS') {
+      return res.sendStatus(200);
+    }
+    next();
+  });
+
   app.use(express.json());
   app.use(cookieParser());
 
@@ -53,6 +71,7 @@ async function main() {
   app.use('/api/organizations', organizationRouter);
   app.use('/api/targets', targetRouter);
   app.use('/api/scans', scanRouter);
+  app.use('/api/vulnerabilities', vulnerabilityRouter);
 
   // --- Global Error Handler ---
   app.use((err: Error, req: Request, res: Response, next: NextFunction) => {
@@ -73,13 +92,15 @@ async function main() {
 
   // --- Start Server and Workers ---
   const PORT = process.env.PORT || 3001;
-  app.listen(PORT, () => {
-    console.log(`🚀 API Server is running on http://localhost:${PORT}`);
+  const server = http.createServer(app);
+  
+  // Initialize Socket.io via our logger service
+  logger.init(server);
 
-    // --- بداية التعديل الرئيسي ---
-    // بعد أن يعمل الخادم بنجاح، قم ببدء تشغيل العمال
-    // startWorkers(); // ❌ Disabled to prevent conflict with 'npm run dev:worker'
-    // --- نهاية التعديل الرئيسي ---
+  server.listen(PORT, () => {
+    console.log(`🚀 API Server is running on http://localhost:${PORT}`);
+    logger.log('DRAGONSPLOIT KERNEL v2.4 OPERATIONAL', 'success');
+    logger.log('WEBSOCKET HANDSHAKE CHANNEL OPENED', 'info');
   });
 
   // --- Graceful Shutdown Handler ---

@@ -1,7 +1,7 @@
 import { Router } from 'express';
 import { body } from 'express-validator';
 import { kurumOlustur, kurumlariListele } from '../controllers/kurum';
-import { kimlikDoğrula } from '../middlewares/auth';
+import { kimlikDoğrula } from '../middleware/auth';
 import { validate } from '../utils/validate';
 
 const organizationRouter = Router();

@@ -1,6 +1,6 @@
 import { Router } from 'express';
 import { body, query, param } from 'express-validator'; // استيراد query و param
-import { kimlikDoğrula } from '../middlewares/auth';
+import { kimlikDoğrula } from '../middleware/auth';
 import { validate } from '../utils/validate'; // إضافة validate
 import {
   hedefOlustur,

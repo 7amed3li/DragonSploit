@@ -1,0 +1,92 @@
+{
+  "common": {
+    "login": "Giriş Yap",
+    "register": "Kayıt Ol",
+    "logout": "Oturumu Kapat",
+    "dashboard": "Panel",
+    "targets": "Hedefler",
+    "scans": "Aktif Taramalar",
+    "vulnerabilities": "Zafiyetler",
+    "terminal": "Terminal",
+    "settings": "Ayarlar",
+    "search": "Ara...",
+    "loading": "Senkronize ediliyor...",
+    "error": "Sistem Hatası",
+    "actions": "İşlemler",
+    "save": "Kaydet",
+    "cancel": "İptal",
+    "delete": "Sil"
+  },
+  "auth": {
+    "gateway": "Erişim Geçidi",
+    "auth_required": "Kimlik Doğrulama Gerekli",
+    "operator_id": "Operatör Kimliği / E-posta",
+    "security_key": "Güvenlik Anahtarı",
+    "initiate_login": "Girişi Başlat",
+    "validating": "Kimlik doğrulanıyor...",
+    "new_operator": "Yeni Operatör mü? [Kayıt Ol]",
+    "forgot_creds": "Bilgilerimi Unuttum",
+    "back_to_login": "Geçide Dön",
+    "create_account": "Yeni Profil Oluştur",
+    "full_name": "Tam Operasyonel Ad"
+  },
+  "dashboard": {
+    "command_center": "Komuta Merkezi",
+    "strategic_overview": "Stratejik Genel Bakış",
+    "operational_status": "Operasyonel Durum",
+    "status_nominal": "Nominal",
+    "active_missions": "Aktif Görevler",
+    "strategic_assets": "Stratejik Varlıklar",
+    "system_health": "Sistem Sağlığı",
+    "detected_flaws": "Tespit Edilen Kusurlar",
+    "mission_logs": "Görev Kayıtları",
+    "waiting_data": "Gelen veriler bekleniyor...",
+    "system_resources": "Sistem Kaynakları"
+  },
+  "targets": {
+    "inventory": "Hedef Envanteri",
+    "operational_intelligence": "Operasyonel İstihbarat",
+    "add_target": "Yeni Varlık Ekle",
+    "target_name": "Hedef Adı / Tanımlama",
+    "target_url": "Hedef URL / Bitiş Noktası",
+    "initialize": "Varlığı Hazırla",
+    "launch_mission": "Görevi Başlat"
+  },
+  "scans": {
+    "mission_control": "Görev Kontrolü",
+    "operational_intel": "Operasyonel İstihbarat",
+    "active_threads": "Aktif İş parçacıkları",
+    "op_target": "Operasyon Hedefi",
+    "exec_status": "Yürütme Durumu",
+    "depth": "Sızma Derinliği",
+    "timestamp": "Zaman Damgası"
+  },
+  "missions": {
+    "select_title": "Taktiksel Profil Seçin",
+    "lightning": "Yıldırım Keşif",
+    "balanced": "Dengeli Taarruz",
+    "deep": "Derin Sızma",
+    "lightning_desc": "Yüzeyel keşif. Hızlı ve gizli.",
+    "balanced_desc": "Standart operasyonel derinlik. Optimal kaynak kullanımı.",
+    "deep_desc": "Sömürü odaklı derinlik. Maksimum istihbarat toplama (Daha yavaş)."
+  },
+  "vulnerabilities": {
+    "dashboard_title": "İstihbarat Akışı",
+    "threat_landscape": "Tehdit Haritası",
+    "detected_flaws": "Tespit Edilen Açıklar",
+    "export_btn": "İstihbaratı Dışa Aktar"
+  },
+  "terminal": {
+    "shell_ready": "root@dragonsploit:~# /usr/bin/bash",
+    "telemetry": "Sistem Telemetrisi",
+    "tools": "Güvenlik Araçları"
+  },
+  "settings": {
+    "system_settings": "Sistem Ayarları",
+    "global_tactical": "Küresel Taktik Yapılandırma",
+    "operator_profile": "Operatör Profili",
+    "interface_config": "Arayüz Yapılandırması",
+    "org_data": "Organizasyon Verileri",
+    "danger_zone": "Tehlikeli Bölge"
+  }
+}

@@ -25,7 +25,7 @@ export const kullaniciKaydi = async (req: Request, res: Response, next: NextFunc
     const password_hash = await bcrypt.hash(password, 10);
 
     // **تصحيح 2:** استدعاء الدالة الجديدة التي تقوم بكل شيء
-    const yeniKullanici = await registerUserAndCreateOrg({ email, name, password_hash });
+    const { user: yeniKullanici, organizationId } = await registerUserAndCreateOrg({ email, name, password_hash });
 
     // توقيع التوكنات مباشرة بعد التسجيل (الدور الافتراضي هو ADMIN لمنظمته)
     const { accessToken, refreshToken } = signTokens({ id: yeniKullanici.id, role: 'ADMIN' });
@@ -41,8 +41,17 @@ export const kullaniciKaydi = async (req: Request, res: Response, next: NextFunc
       maxAge: 7 * 24 * 60 * 60 * 1000,
     } );
 
-    // إرسال الـ Access Token
-    return res.status(201).json({ accessToken });
+    // إرسال الـ Access Token مع بيانات المستخدم
+    return res.status(201).json({ 
+      accessToken,
+      user: {
+        id: yeniKullanici.id,
+        email: yeniKullanici.email,
+        name: yeniKullanici.name,
+        role: 'ADMIN',
+        organizationId // إرسال معرف المنظمة للفرونت اند
+      }
+    });
 
   } catch (hata) {
     next(hata);
@@ -86,7 +95,16 @@ export const kullaniciGiris = async (req: Request, res: Response, next: NextFunc
       maxAge: 7 * 24 * 60 * 60 * 1000,
     } );
 
-    return res.status(200).json({ accessToken });
+    return res.status(200).json({ 
+      accessToken,
+      user: {
+        id: kullanici.id,
+        email: kullanici.email,
+        name: kullanici.name,
+        role: userRole,
+        organizationId: firstMembership.organizationId
+      }
+    });
 
   } catch (hata) {
     next(hata);

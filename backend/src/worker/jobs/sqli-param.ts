@@ -35,7 +35,7 @@ async function detectFingerprint(targetUrl: string): Promise<Fingerprint> {
         // We use a harmless HEAD request first
         const response = await axios.head(targetUrl, { 
             validateStatus: () => true,
-            timeout: 5000 
+            timeout: 15000 
         });
 
         const headers = response.headers;
@@ -45,7 +45,7 @@ async function detectFingerprint(targetUrl: string): Promise<Fingerprint> {
         
         // Use the Engine for Passive Analysis
         const passiveResult = FingerprintEngine.analyzePassive(headers, cookies);
-        fingerprint = passiveResult;
+        fingerprint = { ...fingerprint, ...passiveResult };
 
         if (fingerprint.confidence > 0) {
             console.log(`[Fingerprint] 💡 Passive Match: ${JSON.stringify(fingerprint)}`);
@@ -59,7 +59,7 @@ async function detectFingerprint(targetUrl: string): Promise<Fingerprint> {
         try {
             const errResponse = await axios.get(errorUrl, { 
                 validateStatus: () => true,
-                timeout: 5000 
+                timeout: 15000 
             });
             
             const body = typeof errResponse.data === 'string' ? errResponse.data : JSON.stringify(errResponse.data);
@@ -81,7 +81,7 @@ async function detectFingerprint(targetUrl: string): Promise<Fingerprint> {
         console.log(`[Fingerprint] ❌ Fingerprinting failed: ${error.message}`);
     }
 
-    console.log(`[Fingerprint] 📝 FINAL REPORT: [DB: ${fingerprint.db}] | [Server: ${fingerprint.server}] | [Lang: ${fingerprint.lang}]`);
+    console.log(`[Fingerprint] 📝 FINAL REPORT: [DB: ${fingerprint.db || 'Unknown'}] | [Server: ${fingerprint.server || 'Unknown'}] | [Lang: ${fingerprint.lang || 'Unknown'}]`);
     return fingerprint;
 }
 
@@ -311,14 +311,8 @@ export const processSqliParamJob = async (job: Job, prisma: PrismaClient): Promi
                  state = 'CONFIRMED';
             }
             else if (hasHighConfidence) {
-                console.log(`[${persona.name}] 💥 Confirmed by SQL Error Signature: "${errorSignature}"`);
-                await recordVulnerability(prisma, scanId, VulnerabilityType.SQL_INJECTION, Severity.HIGH, `SQL Injection (Error-Based) in '${param}'`, `Payload: ${aiResponse.payload}\nError: ${errorSignature}`, targetUrl, aiResponse.payload);
-                successfulFindings++;
-                state = 'CONFIRMED';
-            }
-            else if (hasHighConfidence) {
                 console.log(`[${persona.name}] 💥 Confirmed by AI High Confidence (${aiResponse.confidence}%).`);
-                await recordVulnerability(prisma, scanId, VulnerabilityType.SQL_INJECTION, Severity.HIGH, `SQL Injection (AI-Verified) in '${param}'`, `Payload: ${aiResponse.payload}\nReasoning: ${aiResponse.reasoning}`, targetUrl, aiResponse.payload);
+                await recordVulnerability(prisma, scanId, VulnerabilityType.SQL_INJECTION, Severity.MEDIUM, `SQL Injection (AI-Verified) in '${param}'`, `Payload: ${aiResponse.payload}\nReasoning: ${aiResponse.reasoning}`, targetUrl, aiResponse.payload);
                 successfulFindings++;
                 state = 'CONFIRMED';
             }

@@ -1,0 +1,95 @@
+{
+  "common": {
+    "login": "Login",
+    "register": "Register",
+    "logout": "Logout Session",
+    "dashboard": "Dashboard",
+    "targets": "Targets",
+    "scans": "Active Scans",
+    "vulnerabilities": "Vulnerabilities",
+    "terminal": "Terminal",
+    "settings": "Settings",
+    "search": "Search...",
+    "loading": "Synchronizing...",
+    "error": "System Error",
+    "actions": "Actions",
+    "save": "Save",
+    "cancel": "Cancel",
+    "delete": "Delete"
+  },
+  "auth": {
+    "gateway": "Access Gateway",
+    "auth_required": "Authentication Required",
+    "operator_id": "Operator ID / Email",
+    "security_key": "Security Key",
+    "initiate_login": "Initiate Login",
+    "validating": "Validating credentials...",
+    "new_operator": "New Operator? [Sign Up]",
+    "forgot_creds": "Forgot Credentials?",
+    "back_to_login": "Return to Gateway",
+    "create_account": "Initialize New Profile",
+    "full_name": "Full Operational Name"
+  },
+  "dashboard": {
+    "command_center": "Command Center",
+    "strategic_overview": "Strategic Overview",
+    "operational_status": "Operational Status",
+    "status_nominal": "Nominal",
+    "active_missions": "Active Missions",
+    "strategic_assets": "Strategic Assets",
+    "system_health": "System Health",
+    "detected_flaws": "Detected Flaws",
+    "mission_logs": "Mission Logs",
+    "waiting_data": "Waiting for incoming data...",
+    "system_resources": "System Resources"
+  },
+  "targets": {
+    "inventory": "Target Inventory",
+    "operational_intelligence": "Operational Intelligence",
+    "add_target": "Add New Asset",
+    "target_name": "Target Name / Designation",
+    "target_url": "Target URL / Endpoint",
+    "initialize": "Initialize Asset",
+    "launch_mission": "Launch Mission"
+  },
+  "scans": {
+    "mission_control": "Mission Control",
+    "operational_intel": "Operational Intelligence",
+    "active_threads": "Active Threads",
+    "op_target": "Operation Target",
+    "exec_status": "Execution Status",
+    "depth": "Infiltration Depth",
+    "timestamp": "Timestamp"
+  },
+  "missions": {
+    "select_title": "Select Tactical Profile",
+    "lightning": "Lightning Recon",
+    "balanced": "Balanced Assault",
+    "deep": "Deep Infiltration",
+    "lightning_desc": "Surface-level discovery. Fast and stealthy.",
+    "balanced_desc": "Standard operational depth. Optimal resource usage.",
+    "deep_desc": "Exploitative depth. Maximum intelligence gathering (Slower)."
+  },
+  "vulnerabilities": {
+    "intel_feed": "Intelligence Feed",
+    "threat_landscape": "Threat Landscape",
+    "found_at": "Found At",
+    "severity": "Severity",
+    "description": "Description",
+    "poc": "Technical Proof (PoC)",
+    "mark_fixed": "Mark as Fixed"
+  },
+  "terminal": {
+    "shell_ready": "root@dragonsploit:~# /usr/bin/bash",
+    "telemetry": "System Telemetry",
+    "tools": "Security Tools"
+  },
+  "settings": {
+    "system_settings": "System Settings",
+    "global_tactical": "Global Tactical Configuration",
+    "operator_profile": "Operator Profile",
+    "interface_config": "Interface Configuration",
+    "org_data": "Organization Data",
+    "danger_zone": "Danger Zone"
+  }
+}

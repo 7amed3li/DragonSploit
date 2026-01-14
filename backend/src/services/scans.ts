@@ -26,8 +26,15 @@ const getTechnologyFingerprint = async (targetUrl: string): Promise<string> => {
 export const initiateScan = async (
     userId: string,
     targetId: string,
+    profile: string = 'balanced',
     configurationId?: string
 ) => {
+    // Validate profile
+    const validProfiles = ['lightning', 'balanced', 'deep'];
+    if (!validProfiles.includes(profile)) {
+        throw new Error(`Invalid scan profile: ${profile}. Must be one of: ${validProfiles.join(', ')}`);
+    }
+
     // 1. ابحث عن الهدف أولاً.
     const target = await prisma.target.findUnique({
         where: { id: targetId },
@@ -81,11 +88,11 @@ export const initiateScan = async (
     });
 
     // 5. أضف مهمة جديدة إلى قائمة الانتظار.
-    // 🛑 لاحظ: تم استخدام await قبل create لضمان أن scan.id موجود في DB قبل الإرسال للطابور.
     await scanQueue.add('scan-job', { 
         scanId: scan.id,
-        targetUrl: target.url, // 🆕 إرسال الـ URL مباشرةً لتجنب البحث في DB
-        technologyFingerprint: techFingerprint, // 🆕 إرسال البصمة مباشرةً للعامل
+        targetUrl: target.url,
+        technologyFingerprint: techFingerprint,
+        profile: profile, // 🆕 Passing the tactical profile (lightning, balanced, deep)
     }); 
     console.log(`✅ Scan job added to queue for scanId: ${scan.id}`);
 
