@@ -1,7 +1,7 @@
 import { Router } from 'express';
 import { body, query, param } from 'express-validator';
 import { validate } from '../utils/validate';
-import { kimlikDoğrula } from '../middlewares/auth';
+import { kimlikDoğrula } from '../middleware/auth';
 import * as scanController from '../controllers/scans';
 
 const router = Router();

@@ -1,5 +1,6 @@
 import { Request, Response, NextFunction } from 'express';
 import * as scanService from '../services/scans';
+import { logger } from '../utils/logger';
 
 export const createScan = async (
   req: Request,
@@ -8,11 +9,13 @@ export const createScan = async (
 ) => {
   try {
     const userId = req.kullanici!.id;
-    const { targetId, configurationId } = req.body;
+    const { targetId, configurationId, profile } = req.body;
     
     // هذه الدالة الآن تضيف المهمة إلى قائمة الانتظار بفضل التعديلات في ملف الخدمة
-    const scan = await scanService.initiateScan(userId, targetId, configurationId);
+    const scan = await scanService.initiateScan(userId, targetId, profile, configurationId);
     
+    logger.log(`OPERATIONS :: Scan sequence initiated for asset ${targetId}`, 'info');
+
     // --- بداية التعديل ---
     // تم تغيير الرسالة لتكون أكثر دقة وتوضح أن الفحص تم وضعه في قائمة الانتظار
     res.status(201).json({

@@ -24,7 +24,7 @@ interface KullaniciOlusturmaVerisi {
  */
 export const registerUserAndCreateOrg = async (veri: KullaniciOlusturmaVerisi) => {
   try {
-    const newUser = await prisma.$transaction(async (tx) => {
+    const { user: newUserWithoutPassword, organizationId } = await prisma.$transaction(async (tx) => {
       // 1. إنشاء المستخدم
       const user = await tx.user.create({
         data: {
@@ -51,12 +51,11 @@ export const registerUserAndCreateOrg = async (veri: KullaniciOlusturmaVerisi) =
         },
       });
 
-      return user;
+      const { password, ...userWithoutPassword } = user;
+      return { user: userWithoutPassword, organizationId: organization.id };
     });
 
-    // إرجاع المستخدم بدون كلمة المرور
-    const { password, ...userWithoutPassword } = newUser;
-    return userWithoutPassword;
+    return { user: newUserWithoutPassword, organizationId };
 
   } catch (hata) {
     if (hata instanceof Prisma.PrismaClientKnownRequestError && hata.code === 'P2002') {

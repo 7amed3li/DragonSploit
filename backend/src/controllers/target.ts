@@ -9,6 +9,7 @@ import {
   tekHedefiGetir,
   hedefiSil
 } from '../services/target';
+import { logger } from '../utils/logger';
 
 // --- وحدة التحكم 1: إنشاء هدف ---
 export const hedefOlustur = async (req: Request, res: Response) => {
@@ -20,6 +21,7 @@ export const hedefOlustur = async (req: Request, res: Response) => {
   const { name, url, organizationId } = req.body;
   try {
     const yeniHedef = await organizasyonIcinHedefOlustur({ name, url, organizationId, olusturanId });
+    logger.log(`ASSET_DISCOVERY :: New target localized: ${name} (${url})`, 'success');
     return res.status(201).json(yeniHedef);
   } catch (hata) {
     if (hata instanceof Error && hata.message.startsWith('YASAK')) {
@@ -87,6 +89,7 @@ export const deleteTarget = async (req: Request, res: Response) => {
   try {
     // الآن TypeScript متأكد 100% أن 'id' هو 'string'
     await hedefiSil(id, userId);
+    logger.log(`ASSET_PURGE :: Target asset decoupled: ${id}`, 'warning');
     return res.status(204).send();
     
   } catch (hata) {
