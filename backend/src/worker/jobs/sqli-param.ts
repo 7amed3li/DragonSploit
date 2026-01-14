@@ -311,14 +311,8 @@ export const processSqliParamJob = async (job: Job, prisma: PrismaClient): Promi
                  state = 'CONFIRMED';
             }
             else if (hasHighConfidence) {
-                console.log(`[${persona.name}] 💥 Confirmed by SQL Error Signature: "${errorSignature}"`);
-                await recordVulnerability(prisma, scanId, VulnerabilityType.SQL_INJECTION, Severity.HIGH, `SQL Injection (Error-Based) in '${param}'`, `Payload: ${aiResponse.payload}\nError: ${errorSignature}`, targetUrl, aiResponse.payload);
-                successfulFindings++;
-                state = 'CONFIRMED';
-            }
-            else if (hasHighConfidence) {
                 console.log(`[${persona.name}] 💥 Confirmed by AI High Confidence (${aiResponse.confidence}%).`);
-                await recordVulnerability(prisma, scanId, VulnerabilityType.SQL_INJECTION, Severity.HIGH, `SQL Injection (AI-Verified) in '${param}'`, `Payload: ${aiResponse.payload}\nReasoning: ${aiResponse.reasoning}`, targetUrl, aiResponse.payload);
+                await recordVulnerability(prisma, scanId, VulnerabilityType.SQL_INJECTION, Severity.MEDIUM, `SQL Injection (AI-Verified) in '${param}'`, `Payload: ${aiResponse.payload}\nReasoning: ${aiResponse.reasoning}`, targetUrl, aiResponse.payload);
                 successfulFindings++;
                 state = 'CONFIRMED';
             }
