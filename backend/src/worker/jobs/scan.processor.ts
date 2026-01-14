@@ -5,6 +5,7 @@ import { ScanStatus } from '@prisma/client';
 import axios, { AxiosResponse } from 'axios';
 import { prisma } from '../../db';
 import { SCOUT_PERSONA, WARRIOR_PERSONA, ELDER_PERSONA, AttackerPersona } from '../config/personas';
+import { logger } from '../../utils/logger';
 
 // --- بداية الدمج ---
 // استيراد جميع الطوابير المتخصصة التي أنشأناها
@@ -43,7 +44,7 @@ interface TechnologyFingerprint {
  */
 export const processScanJob = async (job: Job<ScanJobData>): Promise<void> => {
   const { scanId, targetUrl, profile } = job.data;
-  console.log(`[Orchestrator] Starting orchestration for scan ID: ${scanId} on URL: ${targetUrl}`);
+  logger.log(`[Orchestrator] Starting orchestration for scan ID: ${scanId} on URL: ${targetUrl}`, 'info');
 
   // Determine Persona based on profile string
   let selectedPersona: AttackerPersona = WARRIOR_PERSONA; // Default
@@ -66,10 +67,10 @@ export const processScanJob = async (job: Job<ScanJobData>): Promise<void> => {
       headers: { 'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36' },
     });
     const fingerprint = analyzeResponse(response);
-    console.log(`[Orchestrator] Fingerprint for ${targetUrl}:`, fingerprint);
-
+    logger.log(`[Orchestrator] Technology fingerprint identified for ${targetUrl}`, 'success');
+  
     // --- بداية منطق التنسيق المحدث والكامل ---
-    console.log(`[Orchestrator] Analyzing fingerprint and dispatching specialized jobs...`);
+    logger.log(`[Orchestrator] Dispatching specialized agents for analysis...`, 'info');
     let dispatchedJobsCount = 0;
 
     // Pass Persona to all sub-jobs
@@ -107,20 +108,19 @@ export const processScanJob = async (job: Job<ScanJobData>): Promise<void> => {
     // في المستقبل، يمكن أن تكون هذه أكثر ذكاءً وتعتمد على نقاط الإدخال المكتشفة
     await sqliQueue.add('sqli-check-job', jobPayload);
     dispatchedJobsCount++;
-    await xssQueue.add('xss-check-job', jobPayload);
-    dispatchedJobsCount++;
+    // await xssQueue.add('xss-check-job', jobPayload); // Disabled - Focus on SQLi only
+    // dispatchedJobsCount++;
 
     console.log(`[Orchestrator] Dispatched a total of ${dispatchedJobsCount} specialized jobs.`);
     // --- نهاية منطق التنسيق ---
 
 
-    // تحديث الفحص الرئيسي وتخزين البصمة
+    // Update scan status only (remove technologyFingerprint - not in schema)
     await prisma.scan.update({
       where: { id: scanId },
       data: {
         status: 'COMPLETED',
         completedAt: new Date(),
-        technologyFingerprint: fingerprint as any,
       },
     });
 
