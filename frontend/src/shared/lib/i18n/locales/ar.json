@@ -1,0 +1,95 @@
+{
+  "common": {
+    "login": "تسجيل الدخول",
+    "register": "إنشاء حساب",
+    "logout": "إنهاء الجلسة",
+    "dashboard": "لوحة التحكم",
+    "targets": "الأهداف",
+    "scans": "الفحوصات النشطة",
+    "vulnerabilities": "الثغرات",
+    "terminal": "التيرمينال",
+    "settings": "الإعدادات",
+    "search": "بحث...",
+    "loading": "جاري المزامنة...",
+    "error": "خطأ في النظام",
+    "actions": "الإجراءات",
+    "save": "حفظ",
+    "cancel": "إلغاء",
+    "delete": "حذف"
+  },
+  "auth": {
+    "gateway": "بوابة العبور",
+    "auth_required": "المصادقة مطلوبة",
+    "operator_id": "معرف المشغل / البريد",
+    "security_key": "مفتاح الأمان",
+    "initiate_login": "بدء تسجيل الدخول",
+    "validating": "جاري التحقق من الهوية...",
+    "new_operator": "مشغل جديد؟ [إنشاء حساب]",
+    "forgot_creds": "نسيت بيانات الاعتماد؟",
+    "back_to_login": "العودة للبوابة",
+    "create_account": "إنشاء ملف عمليات جديد",
+    "full_name": "الاسم العملياتي الكامل"
+  },
+  "dashboard": {
+    "command_center": "مركز القيادة",
+    "strategic_overview": "نظرة استراتيجية شاملة",
+    "operational_status": "الحالة التشغيلية",
+    "status_nominal": "مثالية",
+    "active_missions": "المهمات النشطة",
+    "strategic_assets": "الأصول الاستراتيجية",
+    "system_health": "حالة النظام",
+    "detected_flaws": "التهديدات المكتشفة",
+    "mission_logs": "سجلات المهمة",
+    "waiting_data": "في انتظار البيانات الواردة...",
+    "system_resources": "موارد النظام"
+  },
+  "targets": {
+    "inventory": "مخزن الأهداف",
+    "operational_intelligence": "الذكاء العملياتي",
+    "add_target": "إضافة أصل جديد",
+    "target_name": "اسم الهدف / التعيين",
+    "target_url": "رابط الهدف / النقطة النهائية",
+    "initialize": "تهيئة الأصل",
+    "launch_mission": "بدء المهمة"
+  },
+  "scans": {
+    "mission_control": "التحكم في المهمات",
+    "operational_intel": "الذكاء العملياتي",
+    "active_threads": "الخيوط النشطة",
+    "op_target": "هدف العملية",
+    "exec_status": "حالة التنفيذ",
+    "depth": "عمق التسلل",
+    "timestamp": "الطابع الزمني"
+  },
+  "missions": {
+    "select_title": "اختر نوع المهمة التكتيكية",
+    "lightning": "استطلاع خاطف",
+    "balanced": "هجوم متوازن",
+    "deep": "تسلل عميق",
+    "lightning_desc": "اكتشاف سطحي. سريع وخفي.",
+    "balanced_desc": "عمق تشغيلي قياسي. استخدام مثالي للموارد.",
+    "deep_desc": "تسلل استغلالي. أقصى قدر من جمع المعلومات (أبطأ)."
+  },
+  "vulnerabilities": {
+    "intel_feed": "موجز الاستخبارات",
+    "threat_landscape": "مشهد التهديدات",
+    "found_at": "وقت الاكتشاف",
+    "severity": "مستوى الخطورة",
+    "description": "الوصف",
+    "poc": "الإثبات التقني (PoC)",
+    "mark_fixed": "تعيين كمصلح"
+  },
+  "terminal": {
+    "shell_ready": "root@dragonsploit:~# /usr/bin/bash",
+    "telemetry": "قياس أداء النظام",
+    "tools": "الأدوات الأمنية"
+  },
+  "settings": {
+    "system_settings": "إعدادات النظام",
+    "global_tactical": "التكوين التكتيكي العالمي",
+    "operator_profile": "ملف المشغل",
+    "interface_config": "تكوين الواجهة",
+    "org_data": "بيانات المنظمة",
+    "danger_zone": "منطقة الخطر"
+  }
+}
