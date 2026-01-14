@@ -30,10 +30,8 @@ export const RegisterForm = ({ onBack }: { onBack: () => void }) => {
       localStorage.setItem('dragonsploit-auth-token', data.accessToken);
       navigate('/');
     } catch (err: any) {
-      console.error('Registration error details:', err);
       if (err.response) {
-        console.error('Response data:', err.response.data);
-        console.error('Response status:', err.response.status);
+        // Log removed for production
       }
       const backendMessage = err.response?.data?.message || err.response?.data?.mesaj;
       setError(backendMessage || `Access Denied: ${err.message || 'Registration Failed'}`);
@@ -100,6 +98,7 @@ export const RegisterForm = ({ onBack }: { onBack: () => void }) => {
             <input
               type="password"
               required
+              minLength={8}
               className="w-full bg-black/60 border border-cyber-green/20 py-2 pl-10 pr-4 rtl:pr-10 rtl:pl-4 text-cyber-green focus:outline-none focus:border-cyber-green transition-all font-mono text-sm"
               value={formData.password}
               onChange={e => setFormData({ ...formData, password: e.target.value })}

@@ -97,7 +97,7 @@ const DashboardLayout: React.FC = () => {
         {/* Dynamic Content */}
         <div className="flex-1 overflow-auto p-8 relative">
           {/* Subtle noise/grain overlay */}
-          <div className="absolute inset-0 opacity-5 pointer-events-none bg-[url('https://grainy-gradients.vercel.app/noise.svg')]" />
+          <div className="absolute inset-0 opacity-5 pointer-events-none bg-black" />
           <Outlet />
         </div>
       </main>

@@ -38,7 +38,7 @@ const TerminalPage: React.FC = () => {
   const socketRef = useRef<any>(null);
 
   useEffect(() => {
-    const socket = io('http://localhost:3001', {
+    const socket = io(import.meta.env.VITE_WS_URL || 'http://localhost:3001', {
       withCredentials: true
     });
     socketRef.current = socket;

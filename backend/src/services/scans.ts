@@ -29,6 +29,12 @@ export const initiateScan = async (
     profile: string = 'balanced',
     configurationId?: string
 ) => {
+    // Validate profile
+    const validProfiles = ['lightning', 'balanced', 'deep'];
+    if (!validProfiles.includes(profile)) {
+        throw new Error(`Invalid scan profile: ${profile}. Must be one of: ${validProfiles.join(', ')}`);
+    }
+
     // 1. ابحث عن الهدف أولاً.
     const target = await prisma.target.findUnique({
         where: { id: targetId },

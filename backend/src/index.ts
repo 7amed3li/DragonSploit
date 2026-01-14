@@ -40,7 +40,7 @@ async function main() {
 
   // --- Middlewares ---
   app.use(cors({
-    origin: true, // Allow all origins in dev or specifically localhost
+    origin: ['http://localhost:5173', 'http://localhost:4173'], // Restrict to frontend dev/preview ports
     credentials: true,
     methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
     allowedHeaders: ['Content-Type', 'Authorization', 'X-Requested-With', 'Accept'],

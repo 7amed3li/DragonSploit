@@ -45,12 +45,13 @@ export const kimlikDoğrula = (req: Request, res: Response, next: NextFunction) 
     // إذا كان التوكن غير صالح (منتهي الصلاحية، تالف، إلخ)
     if (err) {
       // يمكنك إبقاء هذا السطر مؤقتًا لتصحيح الأخطاء
-      console.error('JWT Verify Error:', err.message); 
+      // console.error('JWT Verify Error:', err.message); 
       return res.status(403).json({ mesaj: 'Yasak: Geçersiz veya süresi dolmuş token.' }); // Forbidden
     }
 
     // إذا كان التوكن صالحًا، قم بتخزين بيانات المستخدم في كائن الطلب
-    req.kullanici = kullanici;
+    // تعيين 'sub' إلى 'id' لضمان التوافق مع وحدات التحكم التي تتوقع 'id'
+    req.kullanici = { ...kullanici, id: kullanici.sub || kullanici.id };
 
     // اسمح للطلب بالمرور إلى وجهته التالية
     next();

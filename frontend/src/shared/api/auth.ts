@@ -7,10 +7,10 @@ export interface LoginResponse {
 }
 
 export const authApi = {
-  login: (credentials: object) => 
+  login: (credentials: Record<string, unknown>) => 
     apiClient.post<LoginResponse>('/auth/login', credentials),
   
-  register: (userData: object) =>
+  register: (userData: Record<string, unknown>) =>
     apiClient.post<LoginResponse>('/auth/register', userData),
   
   logout: () => 

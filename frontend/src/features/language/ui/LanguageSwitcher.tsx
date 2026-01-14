@@ -17,6 +17,7 @@ const LanguageSwitcher: React.FC = () => {
       <div className="flex gap-2">
         {languages.map((lang) => (
           <button
+            type="button"
             key={lang.code}
             onClick={() => i18n.changeLanguage(lang.code)}
             className={`text-[10px] font-mono font-bold px-1 transition-all ${

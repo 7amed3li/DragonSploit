@@ -13,7 +13,7 @@ export const setupSecurity = (app: Express) => {
     // 2. Rate limiting
     const limiter = rateLimit({
         windowMs: 15 * 60 * 1000, // 15 minutes
-        max: 1000, // Increased for development and automated testing
+        max: process.env.NODE_ENV === 'production' ? 100 : 1000, // 100 for prod, 1000 for dev
         message: 'Too many requests from this IP, please try again later.',
         standardHeaders: true, 
         legacyHeaders: false, 

@@ -78,7 +78,7 @@ const ScansPage: React.FC = () => {
           <div className="col-span-2">{t('scans.exec_status')}</div>
           <div className="col-span-2 text-center">{t('scans.depth')}</div>
           <div className="col-span-2">{t('scans.timestamp')}</div>
-          <div className="col-span-2 text-right">Actions</div>
+          <div className="col-span-2 text-right">{t('common.actions')}</div>
         </div>
 
         {isLoading ? (

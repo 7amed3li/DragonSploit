@@ -33,7 +33,7 @@ export const LoginForm = ({
       setAuth(data.user, data.accessToken);
       // localStorage backup for the interceptor
       localStorage.setItem('dragonsploit-auth-token', data.accessToken);
-      console.log('Login successful');
+      // console.log('Login successful');
       navigate('/');
     } catch (err: any) {
       setError(err.response?.data?.message || 'Access Denied: Invalid Credentials');

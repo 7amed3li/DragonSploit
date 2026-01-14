@@ -34,7 +34,8 @@ apiClient.interceptors.response.use(
           }
         } catch (e) {
           // Corrupted storage, clear it
-          localStorage.clear();
+          localStorage.removeItem('token');
+      localStorage.removeItem('user');
           window.location.href = '/login';
         }
       }

@@ -22,7 +22,7 @@ export const ForgotCredentialsForm = ({ onBack }: { onBack: () => void }) => {
       await new Promise(resolve => setTimeout(resolve, 2000));
       setIsSent(true);
     } catch (err: any) {
-      setError('System Error: Recovery Request Interrupted');
+      setError(t('common.error') || 'System Error');
     } finally {
       setIsSending(false);
     }
