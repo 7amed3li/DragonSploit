@@ -31,6 +31,8 @@ jobs:
       
     - name: Generate Prisma Client
       working-directory: ./backend
+      env:
+        DATABASE_URL: "postgresql://postgres:password@localhost:5432/dragonsploit"
       run: npx prisma generate
 
     - name: Build
