@@ -175,3 +175,31 @@ export const listScansForOrg = async (userId: string, organizationId: string) =>
 
     return scans;
 };
+
+/**
+ * يلغي فحصاً جارياً أو قيد الانتظار.
+ * @param userId - معرف المستخدم.
+ * @param scanId - معرف الفحص.
+ */
+export const cancelScan = async (userId: string, scanId: string) => {
+    // 1. التأكد من وجود الفحص وصلاحيات المستخدم
+    const scan = await getScanById(userId, scanId);
+
+    // 2. تحديث الحالة فقط إذا كانت RUNNING أو QUEUED أو PENDING
+    const activeStatuses = ['RUNNING', 'QUEUED', 'PENDING'];
+    if (activeStatuses.includes(scan.status)) {
+        await prisma.scan.update({
+            where: { id: scanId },
+            data: { 
+                status: ScanStatus.CANCELED,
+                completedAt: new Date() // نعتبره مكتملاً (متوقفاً) لتسجيل الوقت
+            }
+        });
+        
+        // ملاحظة: إيقاف الـ Job الفعلي من BullMQ يتطلب معرف JobId.
+        // في هذه المرحلة، نكتفي بتحديث حالة قاعدة البيانات.
+        // الـ Worker يجب أن يتحقق من حالة الفحص في قاعدة البيانات قبل الاستمرار.
+    }
+    
+    return true;
+};

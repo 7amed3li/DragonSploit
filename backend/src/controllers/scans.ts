@@ -63,3 +63,23 @@ export const listScans = async (
     next(error);
   }
 };
+
+export const cancelScan = async (
+  req: Request,
+  res: Response,
+  next: NextFunction
+) => {
+  try {
+    const userId = req.kullanici!.id;
+    const { id } = req.params;
+
+    if (!id) {
+      return res.status(400).json({ message: 'Scan ID is required' });
+    }
+
+    await scanService.cancelScan(userId, id);
+    res.status(200).json({ message: 'Scan cancellation requested' });
+  } catch (error) {
+    next(error);
+  }
+};

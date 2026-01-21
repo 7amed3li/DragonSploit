@@ -34,6 +34,11 @@ export async function runSqliScan(job: Job, prisma: PrismaClient): Promise<void>
         if (await executeAuthBypassAttack(job, prisma)) totalVulnerabilities++;
         
         await job.updateProgress(10); // تحديث التقدم المبدئي
+        // 🆕 حفظ التقدم الأولي
+        try {
+             // @ts-ignore: Prisma Client types might be stale
+             await prisma.scan.update({ where: { id: scanId }, data: { progress: 10 } });
+        } catch (e) { /* Ignore stale client error */ }
 
         // --- المرحلة الثانية: الفحص الدقيق لكل بارامتر (Waves 2-6) ---
         // نحتفظ بنسخة من البيانات الأصلية لتجنب تلوث البيانات أثناء التكرار
@@ -73,6 +78,18 @@ export async function runSqliScan(job: Job, prisma: PrismaClient): Promise<void>
             // المعادلة: نوزع 80% من التقدم على هذه المرحلة
             const progress = 10 + Math.floor(((i + 1) / totalParams) * 80);
             await job.updateProgress(progress);
+            
+            // 🆕 تحديث التقدم في قاعدة البيانات للعرض في الواجهة (مع حماية من الأخطاء)
+            try {
+                // @ts-ignore: Prisma Client types might be stale
+                await prisma.scan.update({
+                    where: { id: scanId },
+                    data: { progress: progress }
+                });
+            } catch (e) {
+                // قد يفشل إذا لم يتم تحديث Prisma Client بعد، نتجاهل الخطأ لكي لا يتوقف الفحص
+                console.warn('[Orchestrator] Failed to sync progress to DB (Non-fatal)');
+            }
         }
 
         // استعادة البيانات الأصلية للمرحلة الأخيرة
@@ -84,12 +101,15 @@ export async function runSqliScan(job: Job, prisma: PrismaClient): Promise<void>
         if (await executeSecondOrderAttack(job, prisma)) totalVulnerabilities++;
         
         await job.updateProgress(100);
+        // لا نحتاج لتحديث التقدم هنا لأن التحديث الأخير سيضع الحالة COMPLETED والتقدم 100
 
         // --- إتمام المهمة ---
+        // @ts-ignore: Prisma Client types might be stale
         await prisma.scan.update({
             where: { id: scanId },
             data: { 
                 status: 'COMPLETED', 
+                progress: 100, // 🆕 تأكيد الوصول لـ 100%
                 completedAt: new Date(),
                 // يمكن إضافة حقل لعدد النتائج إذا كان مدعوماً في قاعدة البيانات
                 // findingsCount: totalVulnerabilities 

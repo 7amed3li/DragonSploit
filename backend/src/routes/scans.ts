@@ -133,4 +133,22 @@ router.get('/', kimlikDoğrula, listScansValidation, scanController.listScans);
  */
 router.get('/:id', kimlikDoğrula, getScanValidation, scanController.getScan);
 
+/**
+ * @swagger
+ * /scans/{id}/cancel:
+ *   post:
+ *     summary: Cancels an active scan
+ *     tags: [Scans]
+ *     security:
+ *       - bearerAuth: []
+ *     parameters:
+ *       - in: path
+ *         name: id
+ *         required: true
+ *         schema: { type: string }
+ *     responses:
+ *       200: { description: Scan cancelled }
+ */
+router.post('/:id/cancel', kimlikDoğrula, scanController.cancelScan);
+
 export default router;
