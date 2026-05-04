@@ -1,0 +1,34 @@
+# =========================
+# Documentation & Markdown
+# =========================
+*.md linguist-detectable=false
+docs/** linguist-detectable=false
+documentation/** linguist-detectable=false
+
+# =========================
+# Generated / Non-source HTML
+# =========================
+*.html linguist-detectable=false
+# ✅ Real source HTML (Vite entry point)
+frontend/index.html linguist-detectable=true
+
+# =========================
+# Generated Scan Proofs (HTML snapshots)
+# =========================
+backend/proofs/** linguist-detectable=false
+
+# =========================
+# Config & Meta files
+# =========================
+*.yml linguist-detectable=false
+*.yaml linguist-detectable=false
+*.json linguist-detectable=false
+*.xml linguist-detectable=false
+
+# =========================
+# Build / Output folders
+# =========================
+build/** linguist-detectable=false
+dist/** linguist-detectable=false
+out/** linguist-detectable=false
+public/** linguist-detectable=false
