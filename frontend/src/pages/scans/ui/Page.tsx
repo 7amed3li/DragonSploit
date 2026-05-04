@@ -136,7 +136,7 @@ const ScansPage: React.FC = () => {
 
                 <div className="col-span-2">
                   <div className="w-full h-1 bg-cyber-green/5 rounded-full overflow-hidden relative">
-                    {scan.status === 'RUNNING' && !scan.progress ? (
+                    {scan.status === 'RUNNING' && scan.progress == null ? (
                          // Indeterminate Loading State
                          <motion.div 
                            initial={{ x: '-100%' }}
