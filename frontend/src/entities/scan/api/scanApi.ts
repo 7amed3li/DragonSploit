@@ -17,5 +17,10 @@ export const scanApi = {
   getOne: async (id: string): Promise<Scan> => {
     const { data } = await apiClient.get<{ data: Scan }>(`/scans/${id}`);
     return data.data;
+  },
+
+  // 🆕 إيقاف الفحص
+  cancel: async (id: string): Promise<void> => {
+    await apiClient.post(`/scans/${id}/cancel`);
   }
 };

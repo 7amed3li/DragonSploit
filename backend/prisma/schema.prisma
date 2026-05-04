@@ -115,6 +115,7 @@ model Target {
 model Scan {
   id          String     @id @default(cuid())
   status      ScanStatus @default(PENDING)
+  progress    Int        @default(0) // 🆕 نسبة التقدم المئوية
   startedAt   DateTime?
   completedAt DateTime?
   createdAt   DateTime   @default(now())

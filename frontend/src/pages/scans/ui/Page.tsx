@@ -14,13 +14,22 @@ import {
 } from 'lucide-react';
 import { scanApi } from '@/entities/scan/api/scanApi';
 import { useAuthStore } from '@/features/auth/model/authStore';
-import { useQuery } from '@tanstack/react-query';
+import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { useTranslation } from 'react-i18next';
 import type { ScanStatus } from '@/entities/scan/model/types';
 
 const ScansPage: React.FC = () => {
+  const queryClient = useQueryClient(); // Add this
   const { user } = useAuthStore();
   const { t } = useTranslation();
+
+  // Cancel Scan Mutation
+  const cancelMutation = useMutation({
+    mutationFn: (scanId: string) => scanApi.cancel(scanId),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['scans'] });
+    },
+  });
 
   // Fetch Scans with polling
   const { data: scans = [], isLoading, refetch, isRefetching } = useQuery({
@@ -36,6 +45,7 @@ const ScansPage: React.FC = () => {
       case 'PENDING': return 'text-blue-400';
       case 'COMPLETED': return 'text-purple-400';
       case 'FAILED': return 'text-cyber-red';
+      case 'CANCELED': return 'text-white/40';
       default: return 'text-white/40';
     }
   };
@@ -46,6 +56,7 @@ const ScansPage: React.FC = () => {
       case 'PENDING': return <Clock className="w-4 h-4" />;
       case 'COMPLETED': return <CheckCircle2 className="w-4 h-4" />;
       case 'FAILED': return <AlertCircle className="w-4 h-4" />;
+      case 'CANCELED': return <StopCircle className="w-4 h-4" />;
       default: return <StopCircle className="w-4 h-4" />;
     }
   };
@@ -124,13 +135,27 @@ const ScansPage: React.FC = () => {
                 </div>
 
                 <div className="col-span-2">
-                  <div className="w-full h-1 bg-cyber-green/5 rounded-full overflow-hidden">
-                    <motion.div 
-                      initial={{ width: 0 }}
-                      animate={{ width: scan.status === 'COMPLETED' ? '100%' : scan.status === 'RUNNING' ? '65%' : '0%' }}
-                      className={`h-full ${getStatusColor(scan.status).replace('text-', 'bg-')} shadow-[0_0_10px_currentColor]`}
-                    />
+                  <div className="w-full h-1 bg-cyber-green/5 rounded-full overflow-hidden relative">
+                    {scan.status === 'RUNNING' && scan.progress == null ? (
+                         // Indeterminate Loading State
+                         <motion.div 
+                           initial={{ x: '-100%' }}
+                           animate={{ x: '100%' }}
+                           transition={{ repeat: Infinity, duration: 1.5, ease: "linear" }}
+                           className={`h-full w-1/3 ${getStatusColor(scan.status).replace('text-', 'bg-')} shadow-[0_0_10px_currentColor]`}
+                         />
+                    ) : (
+                        // Determined Progress or Static State
+                        <motion.div 
+                          initial={{ width: 0 }}
+                          animate={{ width: scan.status === 'COMPLETED' ? '100%' : `${scan.progress || 0}%` }}
+                          className={`h-full ${getStatusColor(scan.status).replace('text-', 'bg-')} shadow-[0_0_10px_currentColor]`}
+                        />
+                    )}
                   </div>
+                  <p className="text-[9px] font-mono text-right text-cyber-green/60 mt-1">
+                    {scan.status === 'RUNNING' && scan.progress == null ? 'ANALYZING...' : `${scan.status === 'COMPLETED' ? 100 : (scan.progress ?? 0)}%`}
+                  </p>
                 </div>
 
                 <div className="col-span-2">
@@ -147,9 +172,14 @@ const ScansPage: React.FC = () => {
                     <button className="px-3 py-1 bg-purple-500/10 border border-purple-500/40 text-purple-400 text-[10px] font-mono font-bold uppercase hover:bg-purple-500 hover:text-black transition-all flex items-center gap-1">
                       Report <ChevronRight size={12} />
                     </button>
-                  ) : scan.status === 'RUNNING' ? (
-                    <button className="p-1.5 border border-cyber-red/20 text-cyber-red/40 hover:bg-cyber-red/10 hover:text-cyber-red hover:border-cyber-red transition-all" title="Terminate">
-                      <StopCircle size={16} />
+                  ) : scan.status === 'RUNNING' || scan.status === 'PENDING' ? (
+                    <button 
+                      onClick={() => cancelMutation.mutate(scan.id)}
+                      disabled={cancelMutation.isPending}
+                      className="p-1.5 border border-cyber-red/20 text-cyber-red/40 hover:bg-cyber-red/10 hover:text-cyber-red hover:border-cyber-red transition-all disabled:opacity-50" 
+                      title="Terminate Operation"
+                    >
+                      {cancelMutation.isPending ? <Loader2 size={16} className="animate-spin" /> : <StopCircle size={16} />}
                     </button>
                   ) : (
                     <button className="p-1.5 border border-cyber-green/20 text-cyber-green/40 hover:bg-cyber-green/10 hover:text-cyber-green hover:border-cyber-green transition-all" title="Restart">
