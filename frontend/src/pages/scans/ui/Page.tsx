@@ -154,7 +154,7 @@ const ScansPage: React.FC = () => {
                     )}
                   </div>
                   <p className="text-[9px] font-mono text-right text-cyber-green/60 mt-1">
-                    {scan.status === 'RUNNING' && !scan.progress ? 'ANALYZING...' : `${scan.progress || 0}%`}
+                    {scan.status === 'RUNNING' && scan.progress == null ? 'ANALYZING...' : `${scan.status === 'COMPLETED' ? 100 : (scan.progress ?? 0)}%`}
                   </p>
                 </div>
 
